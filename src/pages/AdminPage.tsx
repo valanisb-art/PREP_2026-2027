@@ -93,10 +93,10 @@ export default function AdminPage() {
               <p className="text-muted-foreground text-sm">Cargando usuarios...</p>
             ) : (
               <div className="space-y-3">
-                {users.map((u) => (
+                {users.filter(u => u.email).map((u) => (
                   <div key={u.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-card">
                     <div className="space-y-0.5">
-                      <p className="text-sm font-medium text-foreground">{u.full_name || "Sin nombre"}</p>
+                      <p className="text-sm font-medium text-foreground">{u.full_name || "Usuario sin nombre"}</p>
                       <p className="text-xs text-muted-foreground">{u.email}</p>
                     </div>
                     <Select 
@@ -115,6 +115,12 @@ export default function AdminPage() {
                     </Select>
                   </div>
                 ))}
+                
+                {users.filter(u => !u.email).length > 0 && (
+                  <p className="text-xs text-muted-foreground text-center mt-4 pt-4 border-t border-border">
+                    Se han ocultado {users.filter(u => !u.email).length} sesiones anónimas (visitantes sin cuenta).
+                  </p>
+                )}
               </div>
             )}
           </CardContent>
