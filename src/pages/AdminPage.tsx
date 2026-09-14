@@ -99,7 +99,11 @@ export default function AdminPage() {
                       <p className="text-sm font-medium text-foreground">{u.full_name || "Sin nombre"}</p>
                       <p className="text-xs text-muted-foreground">{u.email}</p>
                     </div>
-                    <Select value={u.role} onValueChange={(val) => handleRoleChange(u.id, val)}>
+                    <Select 
+                      value={u.role} 
+                      onValueChange={(val) => handleRoleChange(u.id, val)}
+                      disabled={u.email === "victor.alanis@ieem.org.mx"}
+                    >
                       <SelectTrigger className="w-40">
                         <SelectValue />
                       </SelectTrigger>
