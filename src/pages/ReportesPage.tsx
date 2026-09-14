@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import AppLayout from "@/components/AppLayout";
 import { activities, getStats } from "@/data/activities";
 import { sessions } from "@/data/sessions";
@@ -16,6 +16,8 @@ import {
 } from "recharts";
 import { exportTableToXlsx, exportChartAsImage } from "@/lib/exportUtils";
 import { supabase } from "@/integrations/supabase/client";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 import { entregables54 } from "@/data/entregables54";
 import { entregables54Gantt } from "@/data/entregables54Gantt";
 import { usePrepActivitiesWithSubs } from "@/hooks/usePrepActivitiesWithSubs";
@@ -97,6 +99,9 @@ export default function ReportesPage() {
   const [customActivities, setCustomActivities] = useState<any[]>([]);
   const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
+  
+  const [exporting, setExporting] = useState(false);
+  const reportesContainerRef = useRef<HTMLDivElement>(null);
   const [dateOverrides, setDateOverrides] = useState<Record<number, { inicio?: string; termino?: string }>>({});
   const [selectedMonth32, setSelectedMonth32] = useState<string>("all");
   const [selectedMonth54, setSelectedMonth54] = useState<string>("all");
@@ -784,9 +789,100 @@ export default function ReportesPage() {
     </div>
   );
 
+  const handleExportPDF = async () => {
+    const container = reportesContainerRef.current;
+    if (!container) return;
+
+    setExporting(true);
+    await new Promise((r) => setTimeout(r, 150));
+
+    try {
+      const isDark = document.documentElement.classList.contains("dark");
+      
+      const canvas = await html2canvas(container, {
+        backgroundColor: isDark ? "#0f1117" : "#ffffff",
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+      });
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const usableW = pageW - margin * 2;
+      const usableH = pageH - margin * 2 - 20;
+
+      const scale = usableW / canvas.width;
+      
+      const contentUsableH = usableH;
+      const rowsPerSlicePx = Math.floor(contentUsableH / scale);
+
+      let yOffset = 0;
+      let pageNum = 0;
+
+      while (yOffset < canvas.height) {
+        if (pageNum > 0) pdf.addPage();
+
+        // Header Title
+        pdf.setFontSize(11);
+        pdf.setTextColor(99, 102, 241);
+        pdf.text("Dashboard PREP 26-27 — Reportes y Estadísticas", margin, margin + 4);
+        
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(120, 120, 120);
+        pdf.text(
+          `Página ${pageNum + 1}   |   Generado: ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}`,
+          margin,
+          margin + 9
+        );
+
+        // Slice rows
+        const currentSlicePx = Math.min(rowsPerSlicePx, canvas.height - yOffset);
+        const sliceCanvas = document.createElement("canvas");
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = currentSlicePx;
+        const sCtx = sliceCanvas.getContext("2d")!;
+        sCtx.drawImage(
+          canvas,
+          0, yOffset, canvas.width, currentSlicePx,
+          0, 0, canvas.width, currentSlicePx
+        );
+
+        const sliceImgData = sliceCanvas.toDataURL("image/png");
+        const rowsY = margin + 14;
+        const sliceMmHeight = currentSlicePx * scale;
+        pdf.addImage(sliceImgData, "PNG", margin, rowsY, usableW, sliceMmHeight);
+
+        // Footer
+        pdf.setFontSize(6.5);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(
+          "IEEM · Unidad de Informática y Estadística (UIE) — Seguimiento PREP 2027",
+          margin,
+          pageH - 4
+        );
+
+        yOffset += currentSlicePx;
+        pageNum++;
+      }
+
+      pdf.save("Reporte_Estadisticas_PREP.pdf");
+    } catch (err) {
+      console.error("PDF export error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-6" id="reportes-pdf-container" ref={reportesContainerRef}>
         {/* Friendly hero */}
         <div className="rounded-xl border border-border bg-gradient-to-br from-primary/10 via-background to-info/5 p-5 md:p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -801,10 +897,16 @@ export default function ReportesPage() {
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="gap-2 self-start md:self-auto" onClick={fetchData} disabled={refreshing}>
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Actualizando…' : 'Actualizar datos'}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 self-start md:self-auto">
+              <Button variant="outline" size="sm" className="gap-2" onClick={handleExportPDF} disabled={exporting || refreshing}>
+                {exporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                {exporting ? 'Generando PDF...' : 'Generar PDF'}
+              </Button>
+              <Button variant="default" size="sm" className="gap-2" onClick={fetchData} disabled={refreshing}>
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Actualizando…' : 'Actualizar datos'}
+              </Button>
+            </div>
           </div>
         </div>
 
