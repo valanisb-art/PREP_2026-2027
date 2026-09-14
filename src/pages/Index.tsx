@@ -32,11 +32,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (role === 'admin') {
       const fetchPending = async () => {
-        const { count } = await supabase
-          .from('user_roles')
-          .select('*', { count: 'exact', head: true })
-          .eq('role', 'invitado');
-        if (count !== null) setPendingUsers(count);
+        const { data: profiles } = await supabase.from("profiles").select("id, email");
+        const { data: roles } = await supabase.from("user_roles").select("user_id, role");
+        
+        if (profiles && roles) {
+          const roleMap = new Map(roles.map((r) => [r.user_id, r.role]));
+          const validUsers = profiles.filter(p => p.email);
+          let count = 0;
+          validUsers.forEach(p => {
+            const r = roleMap.get(p.id) || "invitado";
+            if (r === "invitado") count++;
+          });
+          setPendingUsers(count);
+        }
       };
       fetchPending();
     }
