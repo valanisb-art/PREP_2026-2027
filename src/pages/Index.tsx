@@ -1,13 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/components/AppLayout";
 import StatCard from "@/components/StatCard";
 import AlertCard from "@/components/AlertCard";
 import { JORNADA_ELECTORAL } from "@/data/activities";
-import { FileText, Clock, PlayCircle, CheckCircle2, AlertTriangle, CalendarDays, Search } from "lucide-react";
+import { FileText, Clock, PlayCircle, CheckCircle2, AlertTriangle, CalendarDays, Search, Users, ArrowRight } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { usePrepActivitiesWithSubs } from "@/hooks/usePrepActivitiesWithSubs";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 function getTimeRemaining(targetDate: Date) {
   const now = new Date();
@@ -24,6 +26,21 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [globalSearch, setGlobalSearch] = useState("");
   const { activities: unifiedActivities } = usePrepActivitiesWithSubs();
+  const { role } = useAuth();
+  const [pendingUsers, setPendingUsers] = useState(0);
+
+  useEffect(() => {
+    if (role === 'admin') {
+      const fetchPending = async () => {
+        const { count } = await supabase
+          .from('user_roles')
+          .select('*', { count: 'exact', head: true })
+          .eq('role', 'invitado');
+        if (count !== null) setPendingUsers(count);
+      };
+      fetchPending();
+    }
+  }, [role]);
 
   const computedStats = useMemo(() => {
     let total = 0, pendiente = 0, enProceso = 0, entregado = 0;
@@ -84,6 +101,23 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        {pendingUsers > 0 && (
+          <div className="flex items-center justify-between p-4 rounded-xl border border-destructive/20 bg-destructive/10 text-destructive-foreground animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center gap-3">
+              <Users className="w-5 h-5 text-destructive" />
+              <div>
+                <h3 className="font-semibold text-destructive">Nuevos registros pendientes</h3>
+                <p className="text-sm opacity-90">Tienes {pendingUsers} usuario{pendingUsers > 1 ? 's' : ''} esperando que le asignes un rol.</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => navigate('/admin')}
+              className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors text-sm font-medium"
+            >
+              Ir a Administración <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Dashboard PREP 2027</h1>
