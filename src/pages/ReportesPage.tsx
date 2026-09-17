@@ -335,6 +335,8 @@ export default function ReportesPage() {
     const currentDate = new Date();
     const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
     
+    let firstIncompleteFound = false;
+    
     return months.map((month) => {
       const entregableNums = monthEntregables[month.key] || [];
       const count = entregableNums.length;
@@ -347,7 +349,13 @@ export default function ReportesPage() {
       });
       const isCurrent = month.key === currentMonthKey;
       
-      return { key: month.key, name: month.label, actividades: count, acumulado: cumulative, objetivo: total, porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`, isCurrent, isCompleted };
+      let isInProcess = false;
+      if (count > 0 && !isCompleted && !firstIncompleteFound) {
+        isInProcess = true;
+        firstIncompleteFound = true;
+      }
+      
+      return { key: month.key, name: month.label, actividades: count, acumulado: cumulative, objetivo: total, porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`, isCurrent, isCompleted, isInProcess };
     });
   }, [prepActivities]);
 
@@ -370,6 +378,8 @@ export default function ReportesPage() {
     const currentDate = new Date();
     const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
     
+    let firstIncompleteFound = false;
+    
     return months.map((month) => {
       const entregableNos = monthEntregables[month.key] || [];
       const count = entregableNos.length;
@@ -382,7 +392,13 @@ export default function ReportesPage() {
       });
       const isCurrent = month.key === currentMonthKey;
       
-      return { key: month.key, name: month.label, actividades: count, acumulado: cumulative, objetivo: total, porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`, isCurrent, isCompleted };
+      let isInProcess = false;
+      if (count > 0 && !isCompleted && !firstIncompleteFound) {
+        isInProcess = true;
+        firstIncompleteFound = true;
+      }
+      
+      return { key: month.key, name: month.label, actividades: count, acumulado: cumulative, objetivo: total, porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`, isCurrent, isCompleted, isInProcess };
     });
   }, [all54Activities]);
 
@@ -989,7 +1005,7 @@ export default function ReportesPage() {
                         <Line yAxisId="right" dataKey="objetivo" name="Meta (32)" stroke="hsl(220, 10%, 60%)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
                         <Bar yAxisId="left" dataKey="actividades" name="Actividades del Mes" fill="hsl(330, 70%, 60%)" radius={[4, 4, 0, 0]} barSize={50}>
                           {(selectedMonth32 === 'all' ? monthlyData32 : monthlyData32.filter(m => m.key === selectedMonth32)).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry?.isCompleted ? "hsl(152, 60%, 40%)" : (entry?.isCurrent ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} />
+                            <Cell key={`cell-${index}`} fill={entry?.isCompleted ? "hsl(152, 60%, 40%)" : (entry?.isInProcess ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} />
                           ))}
                           <LabelList content={CustomBarLabel} />
                         </Bar>
@@ -1094,7 +1110,7 @@ export default function ReportesPage() {
                         <Line yAxisId="right" dataKey="objetivo" name={`Meta (${entregables54Gantt.length})`} stroke="hsl(220, 10%, 60%)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
                         <Bar yAxisId="left" dataKey="actividades" name="Entregables del Mes" fill="hsl(330, 70%, 60%)" radius={[4, 4, 0, 0]} barSize={50}>
                           {(selectedMonth54 === 'all' ? monthlyData54 : monthlyData54.filter(m => m.key === selectedMonth54)).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry?.isCompleted ? "hsl(152, 60%, 40%)" : (entry?.isCurrent ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} />
+                            <Cell key={`cell-${index}`} fill={entry?.isCompleted ? "hsl(152, 60%, 40%)" : (entry?.isInProcess ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} />
                           ))}
                           <LabelList content={CustomBarLabel54} />
                         </Bar>
