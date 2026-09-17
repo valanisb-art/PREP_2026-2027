@@ -611,7 +611,7 @@ export default function ReportesPage() {
     if (value === 0) return null;
     return (
       <g>
-        <text x={x + width / 2} y={y - 5} textAnchor="middle" fill={payload?.isCurrent ? "hsl(200, 70%, 50%)" : (payload?.isCompleted ? "hsl(152, 60%, 40%)" : "hsl(330, 70%, 60%)")} fontSize={11} fontWeight={700}>
+        <text x={x + width / 2} y={y - 5} textAnchor="middle" fill={payload?.isCompleted ? "hsl(152, 60%, 40%)" : (payload?.isCurrent ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} fontSize={11} fontWeight={700}>
           {value}
         </text>
         {payload?.isCompleted && (
@@ -626,7 +626,7 @@ export default function ReportesPage() {
     if (value === 0) return null;
     return (
       <g>
-        <text x={x + width / 2} y={y - 5} textAnchor="middle" fill={payload?.isCurrent ? "hsl(200, 70%, 50%)" : (payload?.isCompleted ? "hsl(152, 60%, 40%)" : "hsl(330, 70%, 60%)")} fontSize={11} fontWeight={700}>
+        <text x={x + width / 2} y={y - 5} textAnchor="middle" fill={payload?.isCompleted ? "hsl(152, 60%, 40%)" : (payload?.isCurrent ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} fontSize={11} fontWeight={700}>
           {value}
         </text>
         {payload?.isCompleted && (
@@ -989,7 +989,7 @@ export default function ReportesPage() {
                         <Line yAxisId="right" dataKey="objetivo" name="Meta (32)" stroke="hsl(220, 10%, 60%)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
                         <Bar yAxisId="left" dataKey="actividades" name="Actividades del Mes" fill="hsl(330, 70%, 60%)" radius={[4, 4, 0, 0]} barSize={50}>
                           {(selectedMonth32 === 'all' ? monthlyData32 : monthlyData32.filter(m => m.key === selectedMonth32)).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry?.isCurrent ? "hsl(200, 70%, 50%)" : (entry?.isCompleted ? "hsl(152, 60%, 40%)" : "hsl(330, 70%, 60%)")} />
+                            <Cell key={`cell-${index}`} fill={entry?.isCompleted ? "hsl(152, 60%, 40%)" : (entry?.isCurrent ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} />
                           ))}
                           <LabelList content={CustomBarLabel} />
                         </Bar>
@@ -1094,7 +1094,7 @@ export default function ReportesPage() {
                         <Line yAxisId="right" dataKey="objetivo" name={`Meta (${entregables54Gantt.length})`} stroke="hsl(220, 10%, 60%)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
                         <Bar yAxisId="left" dataKey="actividades" name="Entregables del Mes" fill="hsl(330, 70%, 60%)" radius={[4, 4, 0, 0]} barSize={50}>
                           {(selectedMonth54 === 'all' ? monthlyData54 : monthlyData54.filter(m => m.key === selectedMonth54)).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry?.isCurrent ? "hsl(200, 70%, 50%)" : (entry?.isCompleted ? "hsl(152, 60%, 40%)" : "hsl(330, 70%, 60%)")} />
+                            <Cell key={`cell-${index}`} fill={entry?.isCompleted ? "hsl(152, 60%, 40%)" : (entry?.isCurrent ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} />
                           ))}
                           <LabelList content={CustomBarLabel54} />
                         </Bar>
