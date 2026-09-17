@@ -320,11 +320,13 @@ export default function ReportesPage() {
   // Monthly data for 32 entregables (Remisión al INE)
   // ═══════════════════════════════════════════
   const monthlyData32 = useMemo(() => {
-    const monthCounts: Record<string, number> = {};
+    // Group entregables by month using termino32
+    const monthEntregables: Record<string, string[]> = {};
     for (const e of entregables54.filter(e => e.isMain && e.termino32)) {
       const [yy, mm] = e.termino32!.split('-');
       const key = `${yy}-${mm}`;
-      monthCounts[key] = (monthCounts[key] || 0) + 1;
+      if (!monthEntregables[key]) monthEntregables[key] = [];
+      monthEntregables[key].push(e.entregable);
     }
     const months = getMonthRange();
     let cumulative = 0;
@@ -334,11 +336,15 @@ export default function ReportesPage() {
     const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
     
     return months.map((month) => {
-      const count = monthCounts[month.key] || 0;
+      const entregableNums = monthEntregables[month.key] || [];
+      const count = entregableNums.length;
       cumulative += count;
       
-      const actsInMonth = prepActivities.filter(a => a.proyeccion.termino?.startsWith(month.key));
-      const isCompleted = count > 0 && actsInMonth.length > 0 && actsInMonth.every(a => a.status === 'Entregado');
+      // Match by entregable number to check if all activities in this month are delivered
+      const isCompleted = count > 0 && entregableNums.every(num => {
+        const act = prepActivities.find(a => String(a.entregable) === num);
+        return act && act.status === 'Entregado';
+      });
       const isCurrent = month.key === currentMonthKey;
       
       return { key: month.key, name: month.label, actividades: count, acumulado: cumulative, objetivo: total, porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`, isCurrent, isCompleted };
@@ -349,11 +355,13 @@ export default function ReportesPage() {
   // Monthly data for 54 entregables (Remisión al INE)
   // ═══════════════════════════════════════════
   const monthlyData54 = useMemo(() => {
-    const monthCounts: Record<string, number> = {};
+    // Group entregables by month using fin date
+    const monthEntregables: Record<string, number[]> = {};
     for (const e of entregables54Gantt) {
       const [yy, mm] = e.fin.split('-');
       const key = `${yy}-${mm}`;
-      monthCounts[key] = (monthCounts[key] || 0) + 1;
+      if (!monthEntregables[key]) monthEntregables[key] = [];
+      monthEntregables[key].push(e.no);
     }
     const months = getMonthRange();
     let cumulative = 0;
@@ -363,11 +371,15 @@ export default function ReportesPage() {
     const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
     
     return months.map((month) => {
-      const count = monthCounts[month.key] || 0;
+      const entregableNos = monthEntregables[month.key] || [];
+      const count = entregableNos.length;
       cumulative += count;
       
-      const actsInMonth = all54Activities.filter(a => a.termino?.startsWith(month.key));
-      const isCompleted = count > 0 && actsInMonth.length > 0 && actsInMonth.every(a => a.status === 'Entregado');
+      // Match by entregable number to check if all activities in this month are delivered
+      const isCompleted = count > 0 && entregableNos.every(no => {
+        const act = all54Activities.find(a => String(a.entregable) === String(no));
+        return act && act.status === 'Entregado';
+      });
       const isCurrent = month.key === currentMonthKey;
       
       return { key: month.key, name: month.label, actividades: count, acumulado: cumulative, objetivo: total, porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`, isCurrent, isCompleted };
