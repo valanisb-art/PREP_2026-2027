@@ -440,11 +440,22 @@ const GANTT_EXCEL_MONTHS = [
 export default function Prep54Page() {
   const { activities: unifiedActivities } = usePrepActivitiesWithSubs();
 
-  const getStatus = (desc: string) => {
-    if (!desc || typeof desc !== 'string') return 'Pendiente';
-    const cleanDesc = desc.trim().toLowerCase();
-    const match = unifiedActivities.find(ua => ua?.actividad?.trim().toLowerCase() === cleanDesc);
+  const getStatus = (item: Entregable54Gantt) => {
+    if (!item || !item.descripcion) return 'Pendiente';
+    
+    const cleanDesc = item.descripcion.trim().toLowerCase();
+    let match = unifiedActivities.find(ua => ua?.actividad?.trim().toLowerCase() === cleanDesc);
+    
+    if (!match) {
+      const numMatch = item.entregable.match(/No\.?\s*(\d+)/i);
+      if (numMatch) {
+        const num = numMatch[1];
+        match = unifiedActivities.find(ua => ua.entregable === num);
+      }
+    }
+    
     if (match) return match.status;
+
     for (const ua of unifiedActivities) {
       const subMatch = (ua.subActivities || []).find((sub: any) => sub?.actividad?.trim().toLowerCase() === cleanDesc);
       if (subMatch) return subMatch.status;
@@ -1324,8 +1335,8 @@ export default function Prep54Page() {
                         >
                           {e.entregable}
                         </span>
-                        <span className={`text-[10px] font-medium shrink-0 max-w-[80px] truncate hidden md:inline ${getStatusColor(getStatus(e.descripcion))}`}>
-                          {getStatus(e.descripcion)}
+                        <span className={`text-[10px] font-medium shrink-0 max-w-[80px] truncate hidden md:inline ${getStatusColor(getStatus(e))}`}>
+                          {getStatus(e)}
                         </span>
                       </div>
                     );
@@ -1390,8 +1401,8 @@ export default function Prep54Page() {
                         >
                           {e.entregable}
                         </span>
-                        <span className={`text-[10px] font-medium shrink-0 max-w-[80px] truncate hidden md:inline ${getStatusColor(getStatus(e.descripcion))}`}>
-                          {getStatus(e.descripcion)}
+                        <span className={`text-[10px] font-medium shrink-0 max-w-[80px] truncate hidden md:inline ${getStatusColor(getStatus(e))}`}>
+                          {getStatus(e)}
                         </span>
                       </div>
                     );
