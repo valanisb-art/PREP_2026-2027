@@ -1,0 +1,30 @@
+name: Weekly PREP Alerts
+
+on:
+  schedule:
+    # Runs at 14:00 UTC (8:00 AM CST in Mexico) every Monday
+    - cron: '0 14 * * 1'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  send-alerts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Run Alert Script
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: npx tsx scripts/send-alerts.ts
