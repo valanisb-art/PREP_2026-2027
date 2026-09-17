@@ -438,14 +438,15 @@ const GANTT_EXCEL_MONTHS = [
 ];
 
 export default function Prep54Page() {
-  const { data: unifiedActivities } = usePrepActivitiesWithSubs();
+  const { activities: unifiedActivities } = usePrepActivitiesWithSubs();
 
   const getStatus = (desc: string) => {
+    if (!desc || typeof desc !== 'string') return 'Pendiente';
     const cleanDesc = desc.trim().toLowerCase();
-    const match = unifiedActivities.find(ua => ua.actividad.trim().toLowerCase() === cleanDesc);
+    const match = unifiedActivities.find(ua => ua?.actividad?.trim().toLowerCase() === cleanDesc);
     if (match) return match.status;
     for (const ua of unifiedActivities) {
-      const subMatch = ua.subActivities.find((sub: any) => sub.actividad.trim().toLowerCase() === cleanDesc);
+      const subMatch = (ua.subActivities || []).find((sub: any) => sub?.actividad?.trim().toLowerCase() === cleanDesc);
       if (subMatch) return subMatch.status;
     }
     return 'Pendiente';
