@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { usePrepActivitiesWithSubs } from "@/hooks/usePrepActivitiesWithSubs";
 import AppLayout from "@/components/AppLayout";
 import {
   entregables54Gantt,
@@ -437,6 +438,25 @@ const GANTT_EXCEL_MONTHS = [
 ];
 
 export default function Prep54Page() {
+  const { data: unifiedActivities } = usePrepActivitiesWithSubs();
+
+  const getStatus = (desc: string) => {
+    const cleanDesc = desc.trim().toLowerCase();
+    const match = unifiedActivities.find(ua => ua.actividad.trim().toLowerCase() === cleanDesc);
+    if (match) return match.status;
+    for (const ua of unifiedActivities) {
+      const subMatch = ua.subActivities.find((sub: any) => sub.actividad.trim().toLowerCase() === cleanDesc);
+      if (subMatch) return subMatch.status;
+    }
+    return 'Pendiente';
+  };
+
+  const getStatusColor = (status: string) => {
+    if (status === 'Entregado') return 'text-green-500';
+    if (status === 'En Proceso') return 'text-blue-500';
+    return 'text-red-500';
+  };
+
   const [searchQuery, setSearchQuery] = useState("");
   const [temaFilter, setTemaFilter] = useState("Todos");
   const [respFilter, setRespFilter] = useState("Todos");
@@ -1303,8 +1323,8 @@ export default function Prep54Page() {
                         >
                           {e.entregable}
                         </span>
-                        <span className="text-[10px] text-muted-foreground shrink-0 max-w-[80px] truncate hidden md:inline">
-                          {e.responsable}
+                        <span className={`text-[10px] font-medium shrink-0 max-w-[80px] truncate hidden md:inline ${getStatusColor(getStatus(e.descripcion))}`}>
+                          {getStatus(e.descripcion)}
                         </span>
                       </div>
                     );
@@ -1369,8 +1389,8 @@ export default function Prep54Page() {
                         >
                           {e.entregable}
                         </span>
-                        <span className="text-[10px] text-muted-foreground shrink-0 max-w-[80px] truncate hidden md:inline">
-                          {e.responsable}
+                        <span className={`text-[10px] font-medium shrink-0 max-w-[80px] truncate hidden md:inline ${getStatusColor(getStatus(e.descripcion))}`}>
+                          {getStatus(e.descripcion)}
                         </span>
                       </div>
                     );
