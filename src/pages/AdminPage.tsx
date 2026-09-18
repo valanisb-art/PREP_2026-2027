@@ -5,19 +5,26 @@ import AppLayout from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Shield, Users, Pencil, Trash2, X, Check, RefreshCw } from "lucide-react";
+import { Shield, Users, Pencil, Trash2, Check, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserWithRole {
   id: string;
   email: string;
   full_name: string | null;
+  apellidos?: string | null;
+  telefono?: string | null;
+  extension?: string | null;
+  estatus?: "activo" | "inactivo";
+  username?: string | null;
   role: "admin" | "operativo" | "invitado";
 }
 
@@ -36,59 +43,113 @@ const roleBadgeStyles: Record<string, string> = {
 };
 
 export default function AdminPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [editingRole, setEditingRole] = useState<string>("");
+  const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
+  
+  // State for form
+  const [formData, setFormData] = useState<Partial<UserWithRole>>({});
+  const [newPassword, setNewPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; user: UserWithRole | null }>({
     open: false,
     user: null,
   });
 
+  const isSuperUserAccess = currentUser?.email === SUPER_USER_EMAIL;
+
   const fetchUsers = async () => {
     setLoading(true);
-    const { data: profiles } = await supabase.from("profiles").select("id, email, full_name");
+    // Add new columns. If they don't exist yet, this will fail. We use maybeSingle or catch errors on save.
+    // For now, let's just select what we know exists, and try to get the others.
+    const { data: profiles, error: profileErr } = await supabase.from("profiles").select("*");
     const { data: roles } = await supabase.from("user_roles").select("user_id, role");
 
     if (profiles && roles) {
       const roleMap = new Map(roles.map((r) => [r.user_id, r.role]));
       setUsers(
         profiles
-          .filter((p) => p.email) // hide anonymous sessions
+          .filter((p) => p.email)
           .map((p) => ({
             id: p.id,
             email: p.email || "",
             full_name: p.full_name,
+            apellidos: p.apellidos || "",
+            telefono: p.telefono || "",
+            extension: p.extension || "",
+            estatus: p.estatus || "activo",
+            username: p.username || p.email?.split("@")[0] || "",
             role: (roleMap.get(p.id) as UserWithRole["role"]) || "invitado",
           }))
           .sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email))
       );
+    } else if (profileErr) {
+      toast.error("Error al cargar perfiles: Asegúrate de haber agregado las columnas (apellidos, telefono, extension, estatus, username) a la tabla profiles.");
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    if (isAdmin) fetchUsers();
-  }, [isAdmin]);
+    if (isSuperUserAccess) fetchUsers();
+  }, [isSuperUserAccess]);
 
-  const handleRoleChange = async (userId: string, newRole: string) => {
-    const { error } = await supabase
-      .from("user_roles")
-      .update({ role: newRole as UserWithRole["role"] })
-      .eq("user_id", userId);
+  const handleEditClick = (user: UserWithRole) => {
+    setEditingUser(user);
+    setFormData({ ...user });
+    setNewPassword("");
+  };
 
-    if (error) {
-      toast.error("Error al cambiar rol", { description: error.message });
-    } else {
-      toast.success("Rol actualizado correctamente");
-      setEditingUserId(null);
+  const handleSaveUser = async () => {
+    if (!editingUser) return;
+    setSaving(true);
+    try {
+      // 1. Guardar rol
+      if (formData.role !== editingUser.role) {
+        await supabase
+          .from("user_roles")
+          .update({ role: formData.role })
+          .eq("user_id", editingUser.id);
+      }
+
+      // 2. Guardar perfil
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          full_name: formData.full_name,
+          apellidos: formData.apellidos,
+          telefono: formData.telefono,
+          extension: formData.extension,
+          estatus: formData.estatus,
+          username: formData.username,
+        })
+        .eq("id", editingUser.id);
+
+      if (profileError) {
+         if (profileError.message.includes("Could not find the 'apellidos' column")) {
+            toast.error("Las nuevas columnas no existen en la base de datos de Supabase. Necesitas ejecutarlas en el editor SQL.");
+         } else {
+            throw profileError;
+         }
+      } else {
+        if (newPassword.trim() !== "") {
+          toast.info("Para cambiar la contraseña de otro usuario se requiere configuración de backend en Supabase. El resto de los datos fueron guardados.");
+        } else {
+          toast.success("Usuario actualizado correctamente");
+        }
+      }
+      
+      setEditingUser(null);
       fetchUsers();
+    } catch (err: any) {
+      toast.error("Error al guardar: " + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDeleteUser = async (user: UserWithRole) => {
-    // We only remove their role entry (soft delete from admin view)
     const { error } = await supabase
       .from("user_roles")
       .delete()
@@ -103,21 +164,13 @@ export default function AdminPage() {
     }
   };
 
-  const startEditing = (user: UserWithRole) => {
-    setEditingUserId(user.id);
-    setEditingRole(user.role);
-  };
-
-  const cancelEditing = () => {
-    setEditingUserId(null);
-    setEditingRole("");
-  };
-
-  if (!isAdmin) {
+  if (!isSuperUserAccess) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center h-96">
-          <p className="text-muted-foreground">No tienes permisos para acceder a esta página.</p>
+        <div className="flex flex-col items-center justify-center h-[70vh] gap-4">
+          <Shield className="w-16 h-16 text-muted-foreground opacity-20" />
+          <p className="text-muted-foreground font-medium text-lg">No tienes permisos para acceder a esta página.</p>
+          <p className="text-muted-foreground text-sm">Solo el Super Administrador puede gestionar usuarios.</p>
         </div>
       </AppLayout>
     );
@@ -126,7 +179,6 @@ export default function AdminPage() {
   return (
     <AppLayout>
       <div className="space-y-6 animate-in fade-in duration-500">
-        {/* Header */}
         <div className="rounded-xl border border-border bg-gradient-to-br from-primary/10 via-background to-info/5 p-5 md:p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-start gap-3">
@@ -136,7 +188,7 @@ export default function AdminPage() {
               <div>
                 <h1 className="text-2xl font-bold text-foreground font-display">Gestión de Usuarios</h1>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Administra los roles y permisos de los usuarios registrados en el sistema.
+                  Administra roles, accesos y datos de los usuarios registrados (Solo Superusuario).
                 </p>
               </div>
             </div>
@@ -147,9 +199,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Users Card */}
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-          {/* Card Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-primary" />
@@ -158,7 +208,6 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Table */}
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground mr-2" />
@@ -173,104 +222,53 @@ export default function AdminPage() {
                     <TableHead className="text-xs font-bold text-primary uppercase tracking-wider">Correo</TableHead>
                     <TableHead className="text-xs font-bold text-primary uppercase tracking-wider w-[150px]">Rol</TableHead>
                     <TableHead className="text-xs font-bold text-primary uppercase tracking-wider w-[100px] text-center">Estatus</TableHead>
-                    <TableHead className="text-xs font-bold text-primary uppercase tracking-wider w-[120px] text-center">Acción</TableHead>
+                    <TableHead className="text-xs font-bold text-primary uppercase tracking-wider w-[120px] text-center">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => {
-                    const isSuperUser = user.email === SUPER_USER_EMAIL;
-                    const isEditing = editingUserId === user.id;
-
+                  {users.map((u) => {
+                    const isSuper = u.email === SUPER_USER_EMAIL;
                     return (
-                      <TableRow key={user.id} className="group transition-colors">
-                        {/* Nombre */}
+                      <TableRow key={u.id} className="group transition-colors">
                         <TableCell className="font-medium text-foreground text-sm">
                           <div className="flex items-center gap-2">
-                            {isSuperUser && (
-                              <Shield className="w-3.5 h-3.5 text-destructive shrink-0" />
-                            )}
-                            {user.full_name || "Sin nombre"}
+                            {isSuper && <Shield className="w-3.5 h-3.5 text-destructive shrink-0" />}
+                            {u.full_name || "Sin nombre"} {u.apellidos || ""}
                           </div>
                         </TableCell>
-
-                        {/* Correo */}
-                        <TableCell className="text-sm text-muted-foreground">{user.email}</TableCell>
-
-                        {/* Rol */}
+                        <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
                         <TableCell>
-                          {isEditing ? (
-                            <Select value={editingRole} onValueChange={setEditingRole}>
-                              <SelectTrigger className="h-8 text-xs w-[130px]">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="admin">{roleLabels.admin}</SelectItem>
-                                <SelectItem value="operativo">{roleLabels.operativo}</SelectItem>
-                                <SelectItem value="invitado">{roleLabels.invitado}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Badge variant="outline" className={`text-[11px] font-semibold ${roleBadgeStyles[user.role]}`}>
-                              {roleLabels[user.role]}
-                            </Badge>
-                          )}
-                        </TableCell>
-
-                        {/* Estatus */}
-                        <TableCell className="text-center">
-                          <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 text-[11px] font-semibold" variant="outline">
-                            Activo
+                          <Badge variant="outline" className={`text-[11px] font-semibold ${roleBadgeStyles[u.role]}`}>
+                            {roleLabels[u.role]}
                           </Badge>
                         </TableCell>
-
-                        {/* Acciones */}
+                        <TableCell className="text-center">
+                          <Badge className={u.estatus === "activo" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 text-[11px] font-semibold" : "bg-muted text-muted-foreground border-border text-[11px] font-semibold"} variant="outline">
+                            {u.estatus === "activo" ? "Activo" : "Inactivo"}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            {isEditing ? (
-                              <>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
-                                  onClick={() => handleRoleChange(user.id, editingRole)}
-                                  title="Guardar"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                                  onClick={cancelEditing}
-                                  title="Cancelar"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
-                                  onClick={() => startEditing(user)}
-                                  disabled={isSuperUser}
-                                  title={isSuperUser ? "Superusuario protegido" : "Editar rol"}
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                  onClick={() => setDeleteDialog({ open: true, user })}
-                                  disabled={isSuperUser}
-                                  title={isSuperUser ? "Superusuario protegido" : "Eliminar usuario"}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              </>
-                            )}
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
+                              onClick={() => handleEditClick(u)}
+                              disabled={isSuper}
+                              title={isSuper ? "Superusuario protegido" : "Editar usuario"}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => setDeleteDialog({ open: true, user: u })}
+                              disabled={isSuper}
+                              title={isSuper ? "Superusuario protegido" : "Eliminar usuario"}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -280,21 +278,93 @@ export default function AdminPage() {
               </Table>
             </div>
           )}
-
-          {/* Footer */}
-          {!loading && (
-            <div className="px-5 py-3 border-t border-border bg-muted/20 text-xs text-muted-foreground flex items-center justify-between">
-              <span>Total: {users.length} usuarios registrados</span>
-              <span className="flex items-center gap-1">
-                <Shield className="w-3 h-3 text-destructive" />
-                Superusuario protegido
-              </span>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
+      {/* MODAL DE EDICIÓN (Idéntico a imagen 4) */}
+      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl pb-2 border-b">
+              <Users className="w-5 h-5" /> Editar: {formData.username || editingUser?.email?.split('@')[0]}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Username:</Label>
+              <Input value={formData.username || ""} onChange={e => setFormData({...formData, username: e.target.value})} className="bg-muted/50" />
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Nueva Contraseña (vacío = no cambiar):</Label>
+              <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Nombre: *</Label>
+              <Input value={formData.full_name || ""} onChange={e => setFormData({...formData, full_name: e.target.value})} />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Apellidos:</Label>
+              <Input value={formData.apellidos || ""} onChange={e => setFormData({...formData, apellidos: e.target.value})} />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Correo institucional:</Label>
+              <Input value={formData.email || ""} disabled className="bg-muted opacity-60" />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Teléfono oficina:</Label>
+              <Input value={formData.telefono || ""} onChange={e => setFormData({...formData, telefono: e.target.value})} />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Extensión:</Label>
+              <Input value={formData.extension || ""} onChange={e => setFormData({...formData, extension: e.target.value})} />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Rol: *</Label>
+              <Select value={formData.role} onValueChange={(v: any) => setFormData({...formData, role: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">ADMINISTRADOR</SelectItem>
+                  <SelectItem value="operativo">OPERATIVO</SelectItem>
+                  <SelectItem value="invitado">INVITADO</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Estatus:</Label>
+              <Select value={formData.estatus || "activo"} onValueChange={(v: any) => setFormData({...formData, estatus: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="activo">Activo</SelectItem>
+                  <SelectItem value="inactivo">Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4 gap-2 flex-col sm:flex-row border-t pt-4">
+            <Button onClick={handleSaveUser} className="bg-blue-600 hover:bg-blue-700 text-white" disabled={saving}>
+              {saving ? "Guardando..." : "Actualizar"}
+            </Button>
+            <Button variant="secondary" onClick={() => setEditingUser(null)} disabled={saving}>
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ open, user: open ? deleteDialog.user : null })}>
         <DialogContent>
           <DialogHeader>
@@ -317,4 +387,3 @@ export default function AdminPage() {
     </AppLayout>
   );
 }
-

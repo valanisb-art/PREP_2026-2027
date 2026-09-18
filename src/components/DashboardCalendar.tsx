@@ -144,8 +144,11 @@ export default function DashboardCalendar({ deadlines = [], activityEvents = [] 
                   {dayDeadlines.map((dl) => (
                     <button
                       key={dl.id}
-                      onClick={(e) => { e.stopPropagation(); navigate(`/actividad/${dl.id}`); }}
-                      className="block w-full text-left text-foreground hover:text-primary py-0.5 truncate"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        if (!dl.isSub) navigate(`/actividad/${dl.id}`); 
+                      }}
+                      className={`block w-full text-left py-0.5 truncate ${dl.isSub ? 'text-muted-foreground cursor-default' : 'text-foreground hover:text-primary cursor-pointer'}`}
                     >
                       Entregable {dl.entregable}
                     </button>
@@ -160,8 +163,10 @@ export default function DashboardCalendar({ deadlines = [], activityEvents = [] 
           {dayStarts.slice(0, 2).map((evt) => (
             <button
               key={evt.id}
-              onClick={() => navigate(`/actividad/${evt.id}`)}
-              className={`w-full text-left text-[10px] px-1 py-0.5 rounded truncate transition-colors ${
+              onClick={() => {
+                if (!evt.isSub) navigate(`/actividad/${evt.id}`);
+              }}
+              className={`w-full text-left text-[10px] px-1 py-0.5 rounded truncate transition-colors ${evt.isSub ? 'cursor-default' : 'cursor-pointer'} ${
                 evt.isSub ? 'bg-muted text-muted-foreground border border-border/50' :
                 evt.status === 'Entregado' ? 'bg-success/15 text-success' :
                 evt.status === 'En Proceso' ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold' :

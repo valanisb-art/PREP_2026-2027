@@ -466,13 +466,37 @@ export default function Prep54Page() {
 
   const getStatus = (item: Entregable54Gantt) => {
     const matchData = getMatchingActivity(item);
-    return matchData ? matchData.activity.status : 'Pendiente';
+    
+    // If it has a status explicitly set in the database, use it
+    // Note: If the DB status is just "Pendiente" and it hasn't been explicitly overridden, we might want to fallback.
+    // However, since we want the default behavior to be automatic, we'll calculate it first.
+    
+    const finDate = parseDate(item.fin);
+    const finYear = finDate.getFullYear();
+    const finMonth = finDate.getMonth();
+    
+    const today = new Date();
+    const currYear = today.getFullYear();
+    const currMonth = today.getMonth();
+    
+    let autoStatus = 'Pendiente';
+    if (finYear < currYear || (finYear === currYear && finMonth < currMonth)) {
+      autoStatus = 'Entregado';
+    } else if (finYear === currYear && finMonth === currMonth) {
+      autoStatus = 'En Proceso';
+    }
+
+    if (matchData && matchData.activity.status && matchData.activity.status !== 'Pendiente') {
+      return matchData.activity.status;
+    }
+    
+    return autoStatus;
   };
 
   const getStatusColor = (status: string) => {
-    if (status === 'Entregado') return 'text-green-500';
-    if (status === 'En Proceso') return 'text-blue-500';
-    return 'text-red-500';
+    if (status === 'Entregado') return 'text-success font-semibold';
+    if (status === 'En Proceso') return 'text-blue-500 font-semibold';
+    return 'text-warning font-semibold';
   };
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -1336,8 +1360,11 @@ export default function Prep54Page() {
                           {e.no}
                         </span>
                         <span
-                          className="text-foreground truncate flex-1"
-                          title={e.descripcion}
+                          className="text-foreground truncate flex-1 cursor-pointer hover:underline"
+                          onMouseEnter={(ev) => handleMouseEnter(ev, e)}
+                          onMouseMove={handleMouseMove}
+                          onMouseLeave={handleMouseLeave}
+                          onClick={(ev) => handleMouseEnter(ev, e)}
                         >
                           {e.entregable}
                         </span>
@@ -1421,8 +1448,11 @@ export default function Prep54Page() {
                           {e.no}
                         </span>
                         <span
-                          className="text-foreground truncate flex-1"
-                          title={e.descripcion}
+                          className="text-foreground truncate flex-1 cursor-pointer hover:underline"
+                          onMouseEnter={(ev) => handleMouseEnter(ev, e)}
+                          onMouseMove={handleMouseMove}
+                          onMouseLeave={handleMouseLeave}
+                          onClick={(ev) => handleMouseEnter(ev, e)}
                         >
                           {e.entregable}
                         </span>

@@ -841,6 +841,8 @@ export default function ReportesPage() {
         scale: 1.5,
         useCORS: true,
         logging: false,
+        width: container.scrollWidth,
+        windowWidth: container.scrollWidth,
       });
 
       const pdf = new jsPDF({

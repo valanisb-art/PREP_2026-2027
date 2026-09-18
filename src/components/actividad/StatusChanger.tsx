@@ -81,13 +81,19 @@ export default function StatusChanger({
 
   if (isAdmin) {
     if (compact) {
+      const getStatusColor = (status: string) => {
+        if (status === 'Entregado') return 'text-success font-semibold';
+        if (status === 'En Proceso') return 'text-blue-500 font-semibold';
+        return 'text-warning font-semibold';
+      };
+
       return (
         <Select
           value={effectiveStatus}
           onValueChange={handleChange}
           disabled={loading}
         >
-          <SelectTrigger className="h-6 w-[90px] text-[10px] px-2 py-0 border-transparent bg-transparent hover:bg-black/5 dark:hover:bg-white/5 focus:ring-0">
+          <SelectTrigger className={`h-6 w-[100px] text-[10px] px-2 py-0 border-transparent bg-transparent hover:bg-black/5 dark:hover:bg-white/5 focus:ring-0 ${getStatusColor(effectiveStatus)}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

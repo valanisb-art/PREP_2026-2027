@@ -4,6 +4,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Upload, FileText, Trash2, Loader2, ExternalLink, Paperclip } from "lucide-react";
 import { openEvidencia, extractEvidenciaPath } from "@/lib/evidenciaUrl";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface EvidenceFile {
   id: string;
@@ -78,18 +83,18 @@ export default function SubActivityEvidenceUploader({ activityId, subActivityEnt
   };
 
   return (
-    <div className="inline-flex items-center gap-1">
-      <button
-        onClick={e => { e.stopPropagation(); setExpanded(!expanded); }}
-        className="text-muted-foreground hover:text-primary p-0.5 rounded transition-colors"
-        title="Evidencias"
-      >
-        <Paperclip className="w-3.5 h-3.5" />
-        {files.length > 0 && <span className="text-[9px] ml-0.5 font-bold text-primary">{files.length}</span>}
-      </button>
-
-      {expanded && (
-        <div className="absolute right-4 mt-1 z-50 bg-card border border-border rounded-lg shadow-lg p-3 min-w-[240px]" onClick={e => e.stopPropagation()}>
+    <div className="inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <Popover open={expanded} onOpenChange={setExpanded}>
+        <PopoverTrigger asChild>
+          <button
+            className="text-muted-foreground hover:text-primary p-0.5 rounded transition-colors"
+            title="Evidencias"
+          >
+            <Paperclip className="w-3.5 h-3.5" />
+            {files.length > 0 && <span className="text-[9px] ml-0.5 font-bold text-primary">{files.length}</span>}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[260px] p-3 shadow-lg z-[9999]" align="start" side="right" onClick={e => e.stopPropagation()}>
           <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-2">Evidencias – {subActivityEntregable}</p>
 
           {!isInvitado && (
@@ -129,8 +134,8 @@ export default function SubActivityEvidenceUploader({ activityId, subActivityEnt
               ))}
             </div>
           )}
-        </div>
-      )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
