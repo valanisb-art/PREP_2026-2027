@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import AppLayout from "@/components/AppLayout";
 import { activities, getStats } from "@/data/activities";
 import { sessions } from "@/data/sessions";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, BarChart3, AlertTriangle, Building, Calendar, TrendingUp, Users, Download, Image, RefreshCw, HelpCircle, Sparkles, CheckCircle2, Clock, Target, PieChart as PieIcon, GitCompareArrows, Package, Layers } from "lucide-react";
+import { FileText, BarChart3, AlertTriangle, Building, Calendar, TrendingUp, Users, Download, Image, RefreshCw, HelpCircle, Sparkles, CheckCircle2, Clock, Target, PieChart as PieIcon } from "lucide-react";
 import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -16,12 +16,7 @@ import {
 } from "recharts";
 import { exportTableToXlsx, exportChartAsImage } from "@/lib/exportUtils";
 import { supabase } from "@/integrations/supabase/client";
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
 import { entregables54 } from "@/data/entregables54";
-import { entregables54Gantt } from "@/data/entregables54Gantt";
-import { usePrepActivitiesWithSubs } from "@/hooks/usePrepActivitiesWithSubs";
-import { useAuth } from "@/contexts/AuthContext";
 
 const MONTH_NAMES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const PIE_COLORS = ["hsl(270, 60%, 60%)", "hsl(200, 70%, 50%)", "hsl(152, 60%, 36%)", "hsl(38, 92%, 50%)", "hsl(0, 70%, 50%)"];
@@ -80,33 +75,37 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
   );
 };
 
-// Generates the list of months from Sep 2026 to Jul 2027
-function getMonthRange() {
-  const months: { key: string; label: string }[] = [];
-  let y = 2026, m = 8; // Sep 2026
-  while (y < 2027 || (y === 2027 && m <= 6)) { // through Jul 2027
-    const key = `${y}-${String(m + 1).padStart(2, '0')}`;
-    months.push({ key, label: `${MONTH_NAMES[m].substring(0, 3)} ${y}` });
-    m++; if (m > 11) { m = 0; y++; }
-  }
-  return months;
+function parseDate(s: string) {
+  return new Date(s + "T00:00:00");
+}
+
+function getTemporalStatus(item: { inicio: string; fin: string }): "completado" | "por_entregar" | "en_proceso" | "futuro" {
+  const finDate = parseDate(item.fin);
+  const finYear = finDate.getFullYear();
+  const finMonth = finDate.getMonth();
+  const today = new Date();
+  const currYear = today.getFullYear();
+  const currMonth = today.getMonth();
+  const absFinMonth = finYear * 12 + finMonth;
+  const absCurrMonth = currYear * 12 + currMonth;
+  
+  if (absFinMonth <= absCurrMonth) return "completado";
+  if (absFinMonth === absCurrMonth + 1) return "por_entregar";
+  
+  const inicioDate = parseDate(item.inicio);
+  if (inicioDate <= today) return "en_proceso";
+  return "futuro";
 }
 
 export default function ReportesPage() {
-  const { isInvitado } = useAuth();
   const [prepStatusOverrides, setPrepStatusOverrides] = useState<Record<number, ActivityStatus>>({});
   const [historicoStatusOverrides, setHistoricoStatusOverrides] = useState<Record<number, ActivityStatus>>({});
   const [customActivities, setCustomActivities] = useState<any[]>([]);
   const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
-  
-  const [exporting, setExporting] = useState(false);
-  const reportesContainerRef = useRef<HTMLDivElement>(null);
   const [dateOverrides, setDateOverrides] = useState<Record<number, { inicio?: string; termino?: string }>>({});
-  const [selectedMonth32, setSelectedMonth32] = useState<string>("all");
-  const [selectedMonth54, setSelectedMonth54] = useState<string>("all");
-
-  const { activities: unifiedActivities, loading: unifiedLoading, refetch: refetchUnified } = usePrepActivitiesWithSubs();
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<'32' | '54'>('32');
 
   const fetchData = useCallback(async () => {
     setRefreshing(true);
@@ -134,15 +133,12 @@ export default function ReportesPage() {
       dovr.forEach((r: any) => { m[r.activity_id] = { inicio: r.inicio ?? undefined, termino: r.termino ?? undefined }; });
       setDateOverrides(m);
     }
-    await refetchUnified();
     setRefreshing(false);
-  }, [refetchUnified]);
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ═══════════════════════════════════════════
-  // PREP data (32 actividades principales)
-  // ═══════════════════════════════════════════
+  // --- PREP data (proyección) ---
   const prepActivities = useMemo(() => {
     const staticActs = activities
       .filter(a => !deletedIds.has(a.id))
@@ -153,7 +149,7 @@ export default function ReportesPage() {
           proyeccion: {
             ...a.proyeccion,
             inicio: dOv?.inicio ?? a.proyeccion.inicio,
-            termino: dOv?.termino ?? (a.remisionINE2 || a.proyeccion.termino),
+            termino: dOv?.termino ?? a.proyeccion.termino,
           },
           status: (prepStatusOverrides[a.id] ?? a.status) as ActivityStatus,
         };
@@ -183,52 +179,7 @@ export default function ReportesPage() {
     return [...staticActs, ...customActs];
   }, [prepStatusOverrides, customActivities, deletedIds, dateOverrides]);
 
-  // ═══════════════════════════════════════════
-  // Datos de los 54 entregables (incluyendo sub-entregables)
-  // ═══════════════════════════════════════════
-  const all54Activities = useMemo(() => {
-    return entregables54Gantt.map(ganttItem => {
-      // Intentar empatar el estatus desde unifiedActivities
-      let status: ActivityStatus = 'Pendiente';
-      const cleanDesc = ganttItem.descripcion.trim().toLowerCase();
-      
-      let match = unifiedActivities.find(ua => ua.actividad.trim().toLowerCase() === cleanDesc);
-      
-      if (!match) {
-        const numMatch = ganttItem.entregable.match(/No\.?\s*(\d+)/i);
-        if (numMatch) {
-          const num = numMatch[1];
-          match = unifiedActivities.find(ua => String(ua.entregable) === num);
-        }
-      }
-
-      if (match) {
-        status = match.status;
-      } else {
-        for (const ua of unifiedActivities) {
-          const subMatch = ua.subActivities.find((sub: any) => sub.actividad.trim().toLowerCase() === cleanDesc);
-          if (subMatch) {
-            status = subMatch.status;
-            break;
-          }
-        }
-      }
-      return {
-        entregable: `${ganttItem.no}`,
-        actividad: ganttItem.descripcion,
-        inicio: ganttItem.inicio,
-        termino: ganttItem.fin,
-        status,
-        areaResponsable: ganttItem.responsable,
-        isMain: true,
-        situacionCritica: undefined,
-      };
-    });
-  }, [unifiedActivities]);
-
-  // ═══════════════════════════════════════════
-  // Histórico data
-  // ═══════════════════════════════════════════
+  // --- Histórico data ---
   const historicoActivities = useMemo(() => {
     return activities
       .filter(a => {
@@ -242,33 +193,26 @@ export default function ReportesPage() {
       }));
   }, [historicoStatusOverrides]);
 
-  // ═══════════════════════════════════════════
-  // PREP 32 stats
-  // ═══════════════════════════════════════════
-  const prepStats = useMemo(() => {
-    let pendiente = 0, enProceso = 0, entregado = 0;
-    prepActivities.forEach(a => {
-      if (a.status === 'Entregado') entregado++;
-      else if (a.status === 'En Proceso') enProceso++;
-      else pendiente++;
-    });
-    return { total: prepActivities.length, pendiente, enProceso, entregado };
-  }, [prepActivities]);
-
-  const prepProgress = prepStats.total > 0 ? Math.round((prepStats.entregado / prepStats.total) * 100) : 0;
-
-  // ═══════════════════════════════════════════
   // PREP 54 stats
-  // ═══════════════════════════════════════════
+  const entregables54Gantt = useMemo(() => {
+    return entregables54.map(e => ({
+      inicio: e.remisionINE || '2026-01-01',
+      fin: e.remisionINE || '2027-12-31',
+      ...e
+    }));
+  }, []);
+
   const prep54Stats = useMemo(() => {
-    let pendiente = 0, enProceso = 0, entregado = 0;
-    all54Activities.forEach(a => {
-      if (a.status === 'Entregado') entregado++;
-      else if (a.status === 'En Proceso') enProceso++;
+    let pendiente = 0, enProceso = 0, entregado = 0, porEntregar = 0;
+    entregables54Gantt.forEach(a => {
+      const status = getTemporalStatus(a);
+      if (status === 'completado') entregado++;
+      else if (status === 'por_entregar') porEntregar++;
+      else if (status === 'en_proceso') enProceso++;
       else pendiente++;
     });
-    return { total: all54Activities.length, pendiente, enProceso, entregado };
-  }, [all54Activities]);
+    return { total: entregables54Gantt.length, pendiente, enProceso, entregado, porEntregar };
+  }, [entregables54Gantt]);
 
   const prep54Progress = prep54Stats.total > 0 ? Math.round((prep54Stats.entregado / prep54Stats.total) * 100) : 0;
 
@@ -283,9 +227,7 @@ export default function ReportesPage() {
     return { total: historicoActivities.length, pendiente, enProceso, entregado };
   }, [historicoActivities]);
 
-  // ═══════════════════════════════════════════
-  // PREP 32 area groups
-  // ═══════════════════════════════════════════
+  // PREP area groups
   const areaGroups = useMemo(() => {
     const groups: Record<string, { total: number; entregado: number; enProceso: number; pendiente: number }> = {};
     for (const act of prepActivities) {
@@ -299,179 +241,69 @@ export default function ReportesPage() {
     return groups;
   }, [prepActivities]);
 
-  // ═══════════════════════════════════════════
-  // PREP 54 area groups
-  // ═══════════════════════════════════════════
-  const areaGroups54 = useMemo(() => {
-    const groups: Record<string, { total: number; entregado: number; enProceso: number; pendiente: number }> = {};
-    for (const act of all54Activities) {
-      const area = act.areaResponsable || 'Sin área';
-      if (!groups[area]) groups[area] = { total: 0, entregado: 0, enProceso: 0, pendiente: 0 };
-      groups[area].total++;
-      if (act.status === 'Entregado') groups[area].entregado++;
-      else if (act.status === 'En Proceso') groups[area].enProceso++;
-      else groups[area].pendiente++;
-    }
-    return groups;
-  }, [all54Activities]);
-
   const criticalActivities = prepActivities.filter(a => a.situacionCritica && a.situacionCritica.trim() !== '');
-  const upcoming32 = [...prepActivities].filter(a => a.status !== 'Entregado' && a.proyeccion.termino).sort((a, b) => new Date(a.proyeccion.termino).getTime() - new Date(b.proyeccion.termino).getTime()).slice(0, 10);
+  const upcoming = [...prepActivities].filter(a => a.status !== 'Entregado' && a.proyeccion.termino).sort((a, b) => new Date(a.proyeccion.termino).getTime() - new Date(b.proyeccion.termino).getTime()).slice(0, 10);
 
-  const upcoming54 = useMemo(() => {
-    return [...all54Activities]
-      .filter(a => a.status !== 'Entregado' && a.termino)
-      .sort((a, b) => new Date(a.termino).getTime() - new Date(b.termino).getTime())
-      .slice(0, 10);
-  }, [all54Activities]);
-
-  // ═══════════════════════════════════════════
-  // Monthly data for 32 entregables (Remisión al INE)
-  // ═══════════════════════════════════════════
-  const monthlyData32 = useMemo(() => {
-    // Group entregables by month using termino32
-    const monthEntregables: Record<string, string[]> = {};
-    for (const e of entregables54.filter(e => e.isMain && e.termino32)) {
-      const [yy, mm] = e.termino32!.split('-');
+  // PREP monthly data — based on the 32 main entregables' Remisión al INE dates
+  const monthlyData = useMemo(() => {
+    const monthCounts: Record<string, number> = {};
+    for (const e of entregables54.filter(e => e.isMain && e.remisionINE)) {
+      const [yy, mm] = e.remisionINE!.split('-');
       const key = `${yy}-${mm}`;
-      if (!monthEntregables[key]) monthEntregables[key] = [];
-      monthEntregables[key].push(e.entregable);
+      monthCounts[key] = (monthCounts[key] || 0) + 1;
     }
-    const months = getMonthRange();
+    const months: { key: string; label: string }[] = [];
+    let y = 2026, m = 8; // Sep 2026
+    while (y < 2027 || (y === 2027 && m <= 6)) { // through Jul 2027
+      const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+      months.push({ key, label: `${MONTH_NAMES[m].substring(0, 3)} ${y}` });
+      m++; if (m > 11) { m = 0; y++; }
+    }
     let cumulative = 0;
     const total = 32;
-    
-    const currentDate = new Date();
-    const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-    
-    let firstIncompleteFound = false;
-    
     return months.map((month) => {
-      const entregableNums = monthEntregables[month.key] || [];
-      const count = entregableNums.length;
+      const count = monthCounts[month.key] || 0;
       cumulative += count;
-      
-      // Match by entregable number to check if all activities in this month are delivered
-      const isCompleted = count > 0 && entregableNums.every(num => {
-        const act = prepActivities.find(a => String(a.entregable) === num);
-        return act && act.status === 'Entregado';
-      });
-      const isCurrent = month.key === currentMonthKey;
-      
-      let isInProcess = false;
-      if (count > 0 && !isCompleted && !firstIncompleteFound) {
-        isInProcess = true;
-        firstIncompleteFound = true;
-      }
-      
-      return { key: month.key, name: month.label, actividades: count, acumulado: cumulative, objetivo: total, porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`, isCurrent, isCompleted, isInProcess };
+      return { key: month.key, name: month.label, actividades: count, acumulado: cumulative, objetivo: total, porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%` };
     });
+  }, []);
+
+  const prepMonthlyTable = useMemo(() => {
+    const data: Record<string, { month: string; year: number; count: number }> = {};
+    for (const act of prepActivities) {
+      if (!act.proyeccion.termino) continue;
+      const [yy, mm] = act.proyeccion.termino.split('-');
+      const key = `${yy}-${mm}`;
+      if (!data[key]) data[key] = { month: MONTH_NAMES[parseInt(mm, 10) - 1], year: parseInt(yy, 10), count: 0 };
+      data[key].count++;
+    }
+    return Object.values(data).sort((a, b) => a.year !== b.year ? a.year - b.year : MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month));
   }, [prepActivities]);
 
-  // ═══════════════════════════════════════════
-  // Monthly data for 54 entregables (Remisión al INE)
-  // ═══════════════════════════════════════════
-  const monthlyData54 = useMemo(() => {
-    // Group entregables by month using fin date
-    const monthEntregables: Record<string, number[]> = {};
-    for (const e of entregables54Gantt) {
-      const [yy, mm] = e.fin.split('-');
+  // Remisión al INE — counts per month based on the dates from the 32 entregables
+  // (or 54 if viewMode is set to expanded mode).
+  const remisionMonthlyMap = useMemo(() => {
+    const items = viewMode === '32' ? entregables54.filter(e => e.isMain) : entregables54;
+    const map: Record<string, number> = {};
+    for (const e of items) {
+      if (!e.remisionINE) continue;
+      const [yy, mm] = e.remisionINE.split('-');
       const key = `${yy}-${mm}`;
-      if (!monthEntregables[key]) monthEntregables[key] = [];
-      monthEntregables[key].push(e.no);
+      map[key] = (map[key] || 0) + 1;
     }
-    const months = getMonthRange();
-    let cumulative = 0;
-    const total = entregables54Gantt.length;
-    
-    const currentDate = new Date();
-    const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-    
-    let firstIncompleteFound = false;
-    
-    return months.map((month) => {
-      const entregableNos = monthEntregables[month.key] || [];
-      const count = entregableNos.length;
-      cumulative += count;
-      
-      // Match by entregable number to check if all activities in this month are delivered
-      const isCompleted = count > 0 && entregableNos.every(no => {
-        const act = all54Activities.find(a => String(a.entregable) === String(no));
-        return act && act.status === 'Entregado';
-      });
-      const isCurrent = month.key === currentMonthKey;
-      
-      let isInProcess = false;
-      if (count > 0 && !isCompleted && !firstIncompleteFound) {
-        isInProcess = true;
-        firstIncompleteFound = true;
-      }
-      
-      return { key: month.key, name: month.label, actividades: count, acumulado: cumulative, objetivo: total, porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`, isCurrent, isCompleted, isInProcess };
-    });
-  }, [all54Activities]);
+    return map;
+  }, [viewMode]);
 
-  // Monthly breakdown table for 32
-  const prepMonthlyTable32 = useMemo(() => {
-    const monthCounts: Record<string, number> = {};
-    for (const e of entregables54.filter(e => e.isMain && e.termino32)) {
-      const [yy, mm] = e.termino32!.split('-');
-      const key = `${yy}-${mm}`;
-      monthCounts[key] = (monthCounts[key] || 0) + 1;
-    }
-    let cumulative = 0;
-    const total = 32;
-    return getMonthRange().map(m => {
-      const [yy, mm] = m.key.split('-');
-      const count = monthCounts[m.key] || 0;
-      cumulative += count;
-      return { 
-        key: m.key, 
-        month: MONTH_NAMES[parseInt(mm, 10) - 1], 
-        year: parseInt(yy, 10), 
-        count,
-        acumulado: cumulative,
-        porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`
-      };
-    });
-  }, []);
-
-  // Monthly breakdown table for 54
-  const prepMonthlyTable54 = useMemo(() => {
-    const monthCounts: Record<string, number> = {};
-    for (const e of entregables54Gantt) {
-      const [yy, mm] = e.fin.split('-');
-      const key = `${yy}-${mm}`;
-      monthCounts[key] = (monthCounts[key] || 0) + 1;
-    }
-    let cumulative = 0;
-    const total = entregables54Gantt.length;
-    return getMonthRange().map(m => {
-      const [yy, mm] = m.key.split('-');
-      const count = monthCounts[m.key] || 0;
-      cumulative += count;
-      return { 
-        key: m.key, 
-        month: MONTH_NAMES[parseInt(mm, 10) - 1], 
-        year: parseInt(yy, 10), 
-        count,
-        acumulado: cumulative,
-        porcentaje: `${Math.min(100, Math.round((cumulative / total) * 100))}%`
-      };
-    });
-  }, []);
-
-  // Side-by-side table: 32 main entregables vs all 54
+  // Side-by-side table: 32 main entregables vs all 54, both by Remisión al INE
   const monthlyCombinedTable = useMemo(() => {
     const map32: Record<string, number> = {};
     const map54: Record<string, number> = {};
-    for (const e of entregables54.filter(e => e.isMain && e.termino32)) {
-      const [yy, mm] = e.termino32!.split('-');
-      map32[`${yy}-${mm}`] = (map32[`${yy}-${mm}`] || 0) + 1;
-    }
-    for (const e of entregables54Gantt) {
-      const [yy, mm] = e.fin.split('-');
-      map54[`${yy}-${mm}`] = (map54[`${yy}-${mm}`] || 0) + 1;
+    for (const e of entregables54) {
+      if (!e.remisionINE) continue;
+      const [yy, mm] = e.remisionINE.split('-');
+      const key = `${yy}-${mm}`;
+      map54[key] = (map54[key] || 0) + 1;
+      if (e.isMain) map32[key] = (map32[key] || 0) + 1;
     }
     const keys = Array.from(new Set([...Object.keys(map32), ...Object.keys(map54)])).sort();
     return keys.map(key => {
@@ -489,28 +321,41 @@ export default function ReportesPage() {
   // Compare 32 vs 54 across all months (for the bar chart)
   const comparisonChartData = useMemo(() => {
     const map32: Record<string, number> = {};
-    for (const e of entregables54.filter(e => e.isMain && e.termino32)) {
-      const [yy, mm] = e.termino32!.split('-');
+    for (const e of entregables54.filter(e => e.isMain && e.remisionINE)) {
+      const [yy, mm] = e.remisionINE!.split('-');
       const key = `${yy}-${mm}`;
       map32[key] = (map32[key] || 0) + 1;
     }
     const map54: Record<string, number> = {};
-    for (const e of entregables54Gantt) {
-      const [yy, mm] = e.fin.split('-');
+    for (const e of entregables54.filter(e => e.remisionINE)) {
+      const [yy, mm] = e.remisionINE!.split('-');
       const key = `${yy}-${mm}`;
       map54[key] = (map54[key] || 0) + 1;
     }
-    const months = getMonthRange();
+    // Use the termino-based count for the "32" series as that's what the table shows
+    const termMap: Record<string, number> = {};
+    for (const r of prepMonthlyTable) {
+      const mIdx = MONTH_NAMES.indexOf(r.month);
+      const key = `${r.year}-${String(mIdx + 1).padStart(2, '0')}`;
+      termMap[key] = r.count;
+    }
+    const months: { key: string; label: string }[] = [];
+    let y = 2026, m = 8; // Sep 2026
+    while (y < 2027 || (y === 2027 && m <= 6)) { // through Jul 2027
+      const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+      months.push({ key, label: `${MONTH_NAMES[m].substring(0, 3)} ${y}` });
+      m++; if (m > 11) { m = 0; y++; }
+    }
     return months.map(mo => ({
       name: mo.label,
-      prep32: map32[mo.key] || 0,
+      prep32: termMap[mo.key] || 0,
       prep54: map54[mo.key] || 0,
     }));
-  }, []);
+  }, [prepMonthlyTable]);
 
-  // ═══════════════════════════════════════════
-  // Pie charts for 32
-  // ═══════════════════════════════════════════
+  const totalRemision = useMemo(() => Object.values(remisionMonthlyMap).reduce((a, b) => a + b, 0), [remisionMonthlyMap]);
+
+  // PREP pie chart by year
   const prepPieByYear = useMemo(() => {
     const yearCounts: Record<number, number> = {};
     for (const act of prepActivities) {
@@ -521,31 +366,12 @@ export default function ReportesPage() {
     return Object.entries(yearCounts).map(([year, count]) => ({ name: year, value: count })).sort((a, b) => Number(a.name) - Number(b.name));
   }, [prepActivities]);
 
-  const prepPieByStatus = useMemo(() => {
-    return [
-      { name: 'Pendiente', value: prepStats.pendiente },
-      { name: 'En Proceso', value: prepStats.enProceso },
-      { name: 'Entregado', value: prepStats.entregado },
-    ].filter(d => d.value > 0);
-  }, [prepStats]);
-
-  // ═══════════════════════════════════════════
-  // Pie charts for 54
-  // ═══════════════════════════════════════════
-  const prep54PieByYear = useMemo(() => {
-    const yearCounts: Record<number, number> = {};
-    for (const act of all54Activities) {
-      if (!act.termino) continue;
-      const y = new Date(act.termino + 'T00:00:00').getFullYear();
-      yearCounts[y] = (yearCounts[y] || 0) + 1;
-    }
-    return Object.entries(yearCounts).map(([year, count]) => ({ name: year, value: count })).sort((a, b) => Number(a.name) - Number(b.name));
-  }, [all54Activities]);
-
+  // PREP pie chart by status
   const prep54PieByStatus = useMemo(() => {
     return [
       { name: 'Pendiente', value: prep54Stats.pendiente },
       { name: 'En Proceso', value: prep54Stats.enProceso },
+      { name: 'Por Entregar', value: prep54Stats.porEntregar },
       { name: 'Entregado', value: prep54Stats.entregado },
     ].filter(d => d.value > 0);
   }, [prep54Stats]);
@@ -608,7 +434,7 @@ export default function ReportesPage() {
     return result;
   }, []);
 
-  const CustomAccumulatedLabel32 = (props: any) => {
+  const CustomAccumulatedLabel = (props: any) => {
     const { x, y, value } = props;
     const pct = `${Math.min(100, Math.round((Number(value) / 32) * 100))}%`;
     return (
@@ -619,96 +445,15 @@ export default function ReportesPage() {
     );
   };
 
-  const CustomAccumulatedLabel54 = (props: any) => {
-    const { x, y, value } = props;
-    const total54 = entregables54Gantt.length;
-    const pct = `${Math.min(100, Math.round((Number(value) / total54) * 100))}%`;
-    return (
-      <g>
-        <rect x={x - 20} y={y - 22} width={40} height={18} rx={3} fill="hsl(152, 60%, 36%)" />
-        <text x={x} y={y - 10} textAnchor="middle" fill="white" fontSize={10} fontWeight={600}>{pct}</text>
-      </g>
-    );
-  };
-
   const CustomBarLabel = (props: any) => {
-    const { x, y, width, value, payload } = props;
-    if (value === 0) return null;
-    return (
-      <g>
-        <text x={x + width / 2} y={y - 5} textAnchor="middle" fill={payload?.isCompleted ? "hsl(152, 60%, 40%)" : (payload?.isCurrent ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} fontSize={11} fontWeight={700}>
-          {value}
-        </text>
-        {payload?.isCompleted && (
-          <text x={x + width / 2 + 12} y={y - 12} textAnchor="middle" fill="hsl(152, 60%, 40%)" fontSize={14} fontWeight="bold">✓</text>
-        )}
-      </g>
-    );
+    const { x, y, width, value } = props;
+    return <text x={x + width / 2} y={y - 5} textAnchor="middle" fill="hsl(270, 60%, 50%)" fontSize={11} fontWeight={700}>{value}</text>;
   };
 
-  const CustomBarLabel54 = (props: any) => {
-    const { x, y, width, value, payload } = props;
-    if (value === 0) return null;
-    return (
-      <g>
-        <text x={x + width / 2} y={y - 5} textAnchor="middle" fill={payload?.isCompleted ? "hsl(152, 60%, 40%)" : (payload?.isCurrent ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} fontSize={11} fontWeight={700}>
-          {value}
-        </text>
-        {payload?.isCompleted && (
-          <text x={x + width / 2 + 12} y={y - 12} textAnchor="middle" fill="hsl(152, 60%, 40%)" fontSize={14} fontWeight="bold">✓</text>
-        )}
-      </g>
-    );
-  };
-
-  const STATUS_COLORS = ["hsl(38, 92%, 50%)", "hsl(200, 70%, 50%)", "hsl(152, 60%, 36%)"];
-
-  // XLSX exports
-  const prepXlsx32 = prepMonthlyTable32.map(r => ({ Mes: r.month, Año: r.year, "Entregables": r.count }));
-  const prepXlsx54 = prepMonthlyTable54.map(r => ({ Mes: r.month, Año: r.year, "Entregables": r.count }));
-  const compXlsx = monthlyCombinedTable.map(r => ({ Mes: r.month, Año: r.year, "32 entregables": r.termino, "54 entregables": r.remision }));
-  const historicoXlsx = historicoMonthlyTable.map(r => ({ Mes: r.month, Año: r.year, Actividades: r.count }));
-  const upcoming32Xlsx = upcoming32.map(a => ({
-    Entregable: a.entregable, Actividad: a.actividad, Área: a.areaResponsable,
-    Término: a.proyeccion.termino ? new Date(a.proyeccion.termino).toLocaleDateString('es-MX') : '',
-    Estado: a.status,
-  }));
-  const upcoming54Xlsx = upcoming54.map(a => ({
-    Entregable: a.entregable, Actividad: a.actividad, Área: a.areaResponsable,
-    Término: a.termino ? new Date(a.termino).toLocaleDateString('es-MX') : '',
-    Estado: a.status,
-  }));
-  const areaXlsx = Object.entries(areaGroups).map(([area, d]) => ({
-    Área: area, Total: d.total, Entregados: d.entregado, "En Proceso": d.enProceso, Pendientes: d.pendiente,
-    "Avance %": d.total > 0 ? Math.round((d.entregado / d.total) * 100) : 0,
-  }));
-  const areaXlsx54 = Object.entries(areaGroups54).map(([area, d]) => ({
-    Área: area, Total: d.total, Entregados: d.entregado, "En Proceso": d.enProceso, Pendientes: d.pendiente,
-    "Avance %": d.total > 0 ? Math.round((d.entregado / d.total) * 100) : 0,
-  }));
-
-  // ═══════════════════════════════════════════
-  // Comparison KPIs
-  // ═══════════════════════════════════════════
-  const comparisonKpis = useMemo(() => ({
-    total32: prepStats.total,
-    total54: prep54Stats.total,
-    entregado32: prepStats.entregado,
-    entregado54: prep54Stats.entregado,
-    enProceso32: prepStats.enProceso,
-    enProceso54: prep54Stats.enProceso,
-    pendiente32: prepStats.pendiente,
-    pendiente54: prep54Stats.pendiente,
-    progress32: prepProgress,
-    progress54: prep54Progress,
-  }), [prepStats, prep54Stats, prepProgress, prep54Progress]);
-
-  // ═══════════════════════════════════════════
-  // Reusable section renderers
-  // ═══════════════════════════════════════════
+  const STATUS_COLORS = ["hsl(38, 92%, 50%)", "hsl(200, 70%, 50%)", "hsl(270, 70%, 60%)", "hsl(152, 60%, 36%)"];
 
   // Renders executive summary
-  const renderExecutiveSummary = (stats: typeof prepStats, progress: number, critCount: number, label: string, total: number) => (
+  const renderExecutiveSummary = (stats: any, progress: number, critCount: number, label: string, total: number) => (
     <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 to-info/5 p-5">
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
@@ -719,6 +464,7 @@ export default function ReportesPage() {
           <p className="text-sm text-foreground/90 mt-1 leading-relaxed">
             Llevamos un <span className="font-semibold text-primary">{progress}%</span> de avance:{" "}
             <span className="font-semibold text-success">{stats.entregado} entregadas</span>,{" "}
+            {stats.porEntregar !== undefined && <><span className="font-semibold text-[#a855f7]">{stats.porEntregar} por entregar</span>,{" "}</>}
             <span className="font-semibold text-info">{stats.enProceso} en proceso</span> y{" "}
             <span className="font-semibold text-warning">{stats.pendiente} pendientes</span> de un total de <span className="font-semibold">{stats.total}</span>.
             {critCount > 0 && <> Hay <span className="font-semibold text-destructive">{critCount} situaciones críticas</span> que requieren atención.</>}
@@ -729,7 +475,7 @@ export default function ReportesPage() {
   );
 
   // Renders KPI cards
-  const renderKpiCards = (stats: typeof prepStats, progress: number, critCount: number) => (
+  const renderKpiCards = (stats: any, progress: number, critCount: number) => (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div className="stat-card">
         <div className="flex items-center gap-2 mb-2">
@@ -748,6 +494,7 @@ export default function ReportesPage() {
         <div className="text-2xl font-bold text-foreground">{stats.total}</div>
         <div className="flex flex-wrap gap-1.5 mt-2">
           <Badge variant="outline" className="text-[10px] gap-1"><CheckCircle2 className="w-3 h-3 text-success" />{stats.entregado} entregados</Badge>
+          {stats.porEntregar !== undefined && <Badge variant="outline" className="text-[10px] gap-1"><Package className="w-3 h-3 text-[#a855f7]" />{stats.porEntregar} por entregar</Badge>}
           <Badge variant="outline" className="text-[10px] gap-1"><Clock className="w-3 h-3 text-info" />{stats.enProceso} en proceso</Badge>
           <Badge variant="outline" className="text-[10px] gap-1">{stats.pendiente} pendientes</Badge>
         </div>
@@ -763,165 +510,21 @@ export default function ReportesPage() {
     </div>
   );
 
-  // Renders pie charts (year + status)
-  const renderPieCharts = (pieByYear: any[], pieByStatus: any[], idPrefix: string) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="stat-card">
-        <SectionHeader title="Actividades por año" description="Cómo se distribuyen los entregables entre 2026 y 2027." hint="Cada porción muestra el porcentaje de actividades cuyo término ocurre en ese año." icon={<PieIcon className="w-4 h-4" />} chartId={`${idPrefix}-pie-year`} />
-        <div id={`${idPrefix}-pie-year`}>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={pieByYear} cx="50%" cy="50%" labelLine={false} label={renderCustomizedLabel} outerRadius={100} dataKey="value">
-                {pieByYear.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-              </Pie>
-              <Tooltip formatter={(value: number) => [`${value} actividades`, '']} />
-              <Legend formatter={(value) => <span className="text-xs text-foreground">{value}</span>} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-      <div className="stat-card">
-        <SectionHeader title="Actividades por estatus" description="Distribución actual entre pendientes, en proceso y entregadas." hint="Vista rápida del estado general del proyecto." icon={<PieIcon className="w-4 h-4" />} chartId={`${idPrefix}-pie-status`} />
-        <div id={`${idPrefix}-pie-status`}>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={pieByStatus} cx="50%" cy="50%" labelLine={false} label={renderCustomizedLabel} outerRadius={100} dataKey="value">
-                {pieByStatus.map((d, i) => <Cell key={i} fill={STATUS_COLORS[["Pendiente","En Proceso","Entregado"].indexOf(d.name)] || PIE_COLORS[i]} />)}
-              </Pie>
-              <Tooltip formatter={(value: number) => [`${value} actividades`, '']} />
-              <Legend formatter={(value) => <span className="text-xs text-foreground">{value}</span>} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Renders area progress
-  const renderAreaProgress = (groups: typeof areaGroups, xlsxDataForAreas: any[], filenamePrefix: string) => (
-    <div className="stat-card">
-      <SectionHeader title="Avance por área responsable" description="Cómo va cada área con sus entregables asignados." hint="Las áreas con más actividades requieren mayor seguimiento. El porcentaje muestra entregados respecto al total del área." icon={<Building className="w-4 h-4" />} xlsxData={xlsxDataForAreas} xlsxFilename={`${filenamePrefix}_avance_areas`} />
-      <div className="space-y-3">
-        {Object.entries(groups).sort((a, b) => b[1].total - a[1].total).map(([area, data]) => {
-          const pct = data.total > 0 ? Math.round((data.entregado / data.total) * 100) : 0;
-          return (
-            <div key={area} className="border-b border-border/30 pb-3 last:border-0">
-              <div className="flex items-center justify-between mb-1.5 gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm font-bold text-foreground truncate">{area}</span>
-                  <Badge variant="outline" className="text-[10px]">{data.total} actividades</Badge>
-                </div>
-                <div className="flex items-center gap-3 text-xs shrink-0">
-                  <span className="text-success">{data.entregado} ✓</span>
-                  <span className="text-info">{data.enProceso} ◐</span>
-                  <span className="text-muted-foreground">{data.pendiente} =</span>
-                  <span className="font-bold text-foreground w-10 text-right">{pct}%</span>
-                </div>
-              </div>
-              <Progress value={pct} className="h-1.5" />
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  const handleExportPDF = async () => {
-    const container = reportesContainerRef.current;
-    if (!container) return;
-
-    setExporting(true);
-    await new Promise((r) => setTimeout(r, 150));
-
-    try {
-      const isDark = document.documentElement.classList.contains("dark");
-      
-      const canvas = await html2canvas(container, {
-        backgroundColor: isDark ? "#0f1117" : "#ffffff",
-        scale: 1.5,
-        useCORS: true,
-        logging: false,
-        width: container.scrollWidth,
-        windowWidth: container.scrollWidth,
-      });
-
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const usableW = pageW - margin * 2;
-      const usableH = pageH - margin * 2 - 20;
-
-      const scale = usableW / canvas.width;
-      
-      const contentUsableH = usableH;
-      const rowsPerSlicePx = Math.floor(contentUsableH / scale);
-
-      let yOffset = 0;
-      let pageNum = 0;
-
-      while (yOffset < canvas.height) {
-        if (pageNum > 0) pdf.addPage();
-
-        // Header Title
-        pdf.setFontSize(11);
-        pdf.setTextColor(99, 102, 241);
-        pdf.text("Dashboard PREP 26-27 — Reportes y Estadísticas", margin, margin + 4);
-        
-        pdf.setFontSize(7.5);
-        pdf.setTextColor(120, 120, 120);
-        pdf.text(
-          `Página ${pageNum + 1}   |   Generado: ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}`,
-          margin,
-          margin + 9
-        );
-
-        // Slice rows
-        const currentSlicePx = Math.min(rowsPerSlicePx, canvas.height - yOffset);
-        const sliceCanvas = document.createElement("canvas");
-        sliceCanvas.width = canvas.width;
-        sliceCanvas.height = currentSlicePx;
-        const sCtx = sliceCanvas.getContext("2d")!;
-        sCtx.drawImage(
-          canvas,
-          0, yOffset, canvas.width, currentSlicePx,
-          0, 0, canvas.width, currentSlicePx
-        );
-
-        const sliceImgData = sliceCanvas.toDataURL("image/png");
-        const rowsY = margin + 14;
-        const sliceMmHeight = currentSlicePx * scale;
-        pdf.addImage(sliceImgData, "PNG", margin, rowsY, usableW, sliceMmHeight);
-
-        // Footer
-        pdf.setFontSize(6.5);
-        pdf.setTextColor(150, 150, 150);
-        pdf.text(
-          "IEEM · Unidad de Informática y Estadística (UIE) — Seguimiento PREP 2027",
-          margin,
-          pageH - 4
-        );
-
-        yOffset += currentSlicePx;
-        pageNum++;
-      }
-
-      pdf.save("Reporte_Estadisticas_PREP.pdf");
-    } catch (err) {
-      console.error("PDF export error:", err);
-    } finally {
-      setExporting(false);
-    }
-  };
+  const prepXlsx = monthlyCombinedTable.map(r => ({ Mes: r.month, Año: r.year, "32 entregables": r.termino, "54 entregables": r.remision }));
+  const historicoXlsx = historicoMonthlyTable.map(r => ({ Mes: r.month, Año: r.year, Actividades: r.count }));
+  const upcomingXlsx = upcoming.map(a => ({
+    Entregable: a.entregable, Actividad: a.actividad, Área: a.areaResponsable,
+    Término: a.proyeccion.termino ? new Date(a.proyeccion.termino).toLocaleDateString('es-MX') : '',
+    Estado: a.status,
+  }));
+  const areaXlsx = Object.entries(areaGroups).map(([area, d]) => ({
+    Área: area, Total: d.total, Entregados: d.entregado, "En Proceso": d.enProceso, Pendientes: d.pendiente,
+    "Avance %": d.total > 0 ? Math.round((d.entregado / d.total) * 100) : 0,
+  }));
 
   return (
     <AppLayout>
-      <div className="space-y-6" id="reportes-pdf-container" ref={reportesContainerRef}>
+      <div className="space-y-6">
         {/* Friendly hero */}
         <div className="rounded-xl border border-border bg-gradient-to-br from-primary/10 via-background to-info/5 p-5 md:p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -936,403 +539,196 @@ export default function ReportesPage() {
                 </p>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 self-start md:self-auto">
-              <Button variant="outline" size="sm" className="gap-2" onClick={handleExportPDF} disabled={exporting || refreshing}>
-                {exporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                {exporting ? 'Generando PDF...' : 'Generar PDF'}
-              </Button>
-              <Button variant="default" size="sm" className="gap-2" onClick={fetchData} disabled={refreshing}>
-                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                {refreshing ? 'Actualizando…' : 'Actualizar datos'}
-              </Button>
-            </div>
+            <Button variant="outline" size="sm" className="gap-2 self-start md:self-auto" onClick={fetchData} disabled={refreshing}>
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Actualizando…' : 'Actualizar datos'}
+            </Button>
           </div>
         </div>
 
         <Tabs defaultValue="prep" className="w-full">
-          {!isInvitado && (
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="prep">PREP 26-27</TabsTrigger>
-              <TabsTrigger value="historico">Histórico</TabsTrigger>
-            </TabsList>
-          )}
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="prep">PREP 26-27</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
+          </TabsList>
 
           {/* PREP Tab */}
           <TabsContent value="prep" className="space-y-6 mt-4">
-            {/* Sub-tabs for 32 / 54 / Comparativo */}
-            <Tabs defaultValue="ent32" className="w-full">
-              {!isInvitado ? (
-                <TabsList className="grid w-full grid-cols-3 h-auto">
-                  <TabsTrigger value="ent32" className="gap-2 text-xs sm:text-sm py-2">
-                    <Package className="w-4 h-4 hidden sm:inline" />
-                    32 Entregables
-                  </TabsTrigger>
-                  <TabsTrigger value="ent54" className="gap-2 text-xs sm:text-sm py-2">
-                    <Layers className="w-4 h-4 hidden sm:inline" />
-                    54 Entregables
-                  </TabsTrigger>
-                  <TabsTrigger value="comparativo" className="gap-2 text-xs sm:text-sm py-2">
-                    <GitCompareArrows className="w-4 h-4 hidden sm:inline" />
-                    Comparativo
-                  </TabsTrigger>
-                </TabsList>
-              ) : (
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <Package className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">32 Entregables Principales</span>
+            {/* Executive summary */}
+            {renderExecutiveSummary(prep54Stats, prep54Progress, criticalActivities.length, "PREP 54", prep54Stats.total)}
+
+            {/* KPI cards */}
+            {renderKpiCards(prep54Stats, prep54Progress, criticalActivities.length)}
+
+            {/* Pie charts: year + status */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="stat-card">
+                <SectionHeader title="Actividades por año" description="Cómo se distribuyen los entregables entre 2026 y 2027." hint="Cada porción muestra el porcentaje de actividades cuyo término ocurre en ese año." icon={<PieIcon className="w-4 h-4" />} chartId="prep-pie-year" />
+                <div id="prep-pie-year">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={prepPieByYear} cx="50%" cy="50%" labelLine={false} label={renderCustomizedLabel} outerRadius={100} dataKey="value">
+                        {prepPieByYear.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [`${value} actividades`, '']} />
+                      <Legend formatter={(value) => <span className="text-xs text-foreground">{value}</span>} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              )}
-
-              {/* ══════════════════════════════════════ */}
-              {/* SUB-TAB: 32 ENTREGABLES              */}
-              {/* ══════════════════════════════════════ */}
-              <TabsContent value="ent32" className="space-y-6 mt-4">
-                {renderExecutiveSummary(prepStats, prepProgress, criticalActivities.length, "32 Entregables Principales", 32)}
-                {renderKpiCards(prepStats, prepProgress, criticalActivities.length)}
-                {renderPieCharts(prepPieByYear, prepPieByStatus, "prep32")}
-
-                {/* Cumulative monthly progress */}
-                <div className="stat-card">
-                  <SectionHeader title="¿Cómo avanzamos mes a mes?" description="Barras: actividades que terminan ese mes. Línea verde: avance acumulado. Línea punteada: meta total (32)." hint="Permite ver el ritmo esperado de entregas y el progreso acumulado hacia la meta de 32 actividades." icon={<TrendingUp className="w-4 h-4" />} chartId="prep32-cumulative-chart" />
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs text-muted-foreground">Ver mes:</span>
-                    <Select value={selectedMonth32} onValueChange={setSelectedMonth32}>
-                      <SelectTrigger className="h-7 w-44 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos los meses</SelectItem>
-                        {monthlyData32.map(m => <SelectItem key={m.key} value={m.key}>{m.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div id="prep32-cumulative-chart">
-                    <ResponsiveContainer width="100%" height={500}>
-                      <ComposedChart data={selectedMonth32 === 'all' ? monthlyData32 : monthlyData32.filter(m => m.key === selectedMonth32)} margin={{ top: 30, right: 20, left: 10, bottom: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 88%)" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={{ stroke: 'hsl(220, 16%, 88%)' }} interval={0} />
-                        <YAxis yAxisId="left" orientation="left" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} />
-                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} domain={[0, 32]} ticks={[0, 8, 16, 24, 32]} />
-                        <Tooltip contentStyle={{ backgroundColor: 'hsl(0, 0%, 100%)', border: '1px solid hsl(220, 16%, 88%)', borderRadius: '8px', fontSize: '12px' }} />
-                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }} />
-                        <Line yAxisId="right" dataKey="objetivo" name="Meta (32)" stroke="hsl(220, 10%, 60%)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
-                        <Bar yAxisId="left" dataKey="actividades" name="Actividades del Mes" fill="hsl(330, 70%, 60%)" radius={[4, 4, 0, 0]} barSize={50}>
-                          {(selectedMonth32 === 'all' ? monthlyData32 : monthlyData32.filter(m => m.key === selectedMonth32)).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry?.isCompleted ? "hsl(152, 60%, 40%)" : (entry?.isInProcess ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} />
-                          ))}
-                          <LabelList content={CustomBarLabel} />
-                        </Bar>
-                        <Line yAxisId="right" dataKey="acumulado" name="Acumulado" stroke="hsl(152, 60%, 36%)" strokeWidth={2.5} dot={{ r: 3, fill: 'hsl(152, 60%, 36%)', stroke: 'white', strokeWidth: 2 }}>
-                          <LabelList content={CustomAccumulatedLabel32} />
-                        </Line>
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
+              </div>
+              <div className="stat-card">
+                <SectionHeader title="Actividades por estatus" description="Distribución actual entre pendientes, en proceso y entregadas." hint="Vista rápida del estado general del proyecto." icon={<PieIcon className="w-4 h-4" />} chartId="prep-pie-status" />
+                <div id="prep-pie-status">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={prepPieByStatus} cx="50%" cy="50%" labelLine={false} label={renderCustomizedLabel} outerRadius={100} dataKey="value">
+                        {prepPieByStatus.map((d, i) => <Cell key={i} fill={STATUS_COLORS[["Pendiente","En Proceso","Por Entregar","Entregado"].indexOf(d.name)] || PIE_COLORS[i]} />)}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [`${value} actividades`, '']} />
+                      <Legend formatter={(value) => <span className="text-xs text-foreground">{value}</span>} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
+              </div>
+            </div>
 
-                {/* Monthly breakdown table for 32 */}
-                <div className="stat-card">
-                  <SectionHeader title="Desglose mensual — 32 Entregables" description="Entregables principales por mes según la fecha de Remisión al INE." icon={<Calendar className="w-4 h-4" />} xlsxData={prepXlsx32} xlsxFilename="prep_32_desglose_mensual" />
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Mes</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Año</th>
-                          <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">Entregables</th>
-                          <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">Acumulado (%)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {prepMonthlyTable32.map((row, i) => (
-                          <tr key={i} className="border-b border-border/30">
-                            <td className="py-2 px-3 text-foreground">{row.month}</td>
-                            <td className="py-2 px-3 text-foreground">{row.year}</td>
-                            <td className="py-2 px-3 text-center font-bold text-primary">{row.count || '—'}</td>
-                            <td className="py-2 px-3 text-center text-muted-foreground font-medium">{row.porcentaje}</td>
-                          </tr>
-                        ))}
-                        <tr className="bg-muted/30 font-bold">
-                          <td className="py-2 px-3 text-foreground" colSpan={2}>Total</td>
-                          <td className="py-2 px-3 text-center text-primary">{prepMonthlyTable32.reduce((s, r) => s + r.count, 0)}</td>
-                          <td className="py-2 px-3 text-center text-muted-foreground">100%</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+            {/* Cumulative monthly progress */}
+            <div className="stat-card">
+              <SectionHeader title="¿Cómo avanzamos mes a mes?" description="Barras: actividades que terminan ese mes. Línea verde: avance acumulado. Línea punteada: meta total." hint="Permite ver el ritmo esperado de entregas y el progreso acumulado hacia la meta de 32 actividades." icon={<TrendingUp className="w-4 h-4" />} chartId="prep-cumulative-chart" />
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs text-muted-foreground">Ver mes:</span>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="h-7 w-44 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los meses</SelectItem>
+                    {monthlyData.map(m => <SelectItem key={m.key} value={m.key}>{m.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div id="prep-cumulative-chart">
+                <ResponsiveContainer width="100%" height={380}>
+                  <ComposedChart data={selectedMonth === 'all' ? monthlyData : monthlyData.filter(m => m.key === selectedMonth)} margin={{ top: 30, right: 20, left: 10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 88%)" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={{ stroke: 'hsl(220, 16%, 88%)' }} interval={0} />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} domain={[0, 32]} ticks={[0, 8, 16, 24, 32]} />
+                    <Tooltip contentStyle={{ backgroundColor: 'hsl(0, 0%, 100%)', border: '1px solid hsl(220, 16%, 88%)', borderRadius: '8px', fontSize: '12px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }} />
+                    <Line dataKey="objetivo" name="Meta (32)" stroke="hsl(220, 10%, 60%)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
+                    <Bar dataKey="actividades" name="Actividades del Mes" fill="hsl(270, 60%, 60%)" radius={[4, 4, 0, 0]} barSize={24}>
+                      <LabelList content={CustomBarLabel} />
+                    </Bar>
+                    <Line dataKey="acumulado" name="Acumulado" stroke="hsl(152, 60%, 36%)" strokeWidth={2.5} dot={{ r: 3, fill: 'hsl(152, 60%, 36%)', stroke: 'white', strokeWidth: 2 }}>
+                      <LabelList content={CustomAccumulatedLabel} />
+                    </Line>
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-                {renderAreaProgress(areaGroups, areaXlsx, "prep32")}
+            {/* Monthly breakdown table */}
+            <div className="stat-card">
+              <SectionHeader title="Desglose mensual" description="Entregables por mes según la fecha de Remisión al INE. Comparativo entre los 32 entregables principales y los 54 totales (incluyendo sub-entregables)." icon={<Calendar className="w-4 h-4" />} xlsxData={prepXlsx} xlsxFilename="prep_desglose_mensual" />
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Mes</th>
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Año</th>
+                      <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">32 entregables</th>
+                      <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">54 entregables</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyCombinedTable.map((row, i) => (
+                      <tr key={i} className="border-b border-border/30">
+                        <td className="py-2 px-3 text-foreground">{row.month}</td>
+                        <td className="py-2 px-3 text-foreground">{row.year}</td>
+                        <td className="py-2 px-3 text-center font-bold text-primary">{row.termino || '—'}</td>
+                        <td className="py-2 px-3 text-center font-bold text-info">{row.remision || '—'}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-muted/30 font-bold">
+                      <td className="py-2 px-3 text-foreground" colSpan={2}>Total</td>
+                      <td className="py-2 px-3 text-center text-primary">{monthlyCombinedTable.reduce((s, r) => s + r.termino, 0)}</td>
+                      <td className="py-2 px-3 text-center text-info">{monthlyCombinedTable.reduce((s, r) => s + r.remision, 0)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                {/* Upcoming deadlines for 32 */}
-                <div className="stat-card">
-                  <SectionHeader title="Próximos vencimientos" description="Las 10 actividades más cercanas a su fecha de término que aún no se entregan." icon={<Calendar className="w-4 h-4" />} xlsxData={upcoming32Xlsx} xlsxFilename="prep32_proximos_vencimientos" />
-                  <div className="space-y-2">
-                    {upcoming32.length === 0 && <p className="text-sm text-muted-foreground">No hay próximos vencimientos.</p>}
-                    {upcoming32.map((a) => {
-                      const dias = Math.ceil((new Date(a.proyeccion.termino).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                      const fecha = new Date(a.proyeccion.termino + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' });
-                      return (
-                        <div key={a.id} className="flex items-center justify-between gap-3 py-1.5 border-b border-border/30 last:border-0">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <span className="text-xs text-muted-foreground w-6 text-right">{a.entregable}</span>
-                            <span className="text-sm text-foreground truncate">{a.actividad}</span>
-                          </div>
-                          <div className="flex items-center gap-3 text-xs shrink-0">
-                            <span className={dias <= 30 ? 'text-destructive font-semibold' : dias <= 90 ? 'text-warning' : 'text-muted-foreground'}>{dias}d restantes</span>
-                            <span className="text-muted-foreground">{fecha}</span>
-                          </div>
+            {/* Monthly bar chart */}
+            <div className="stat-card">
+              <SectionHeader title="Carga de trabajo por mes — Comparativo 32 vs 54" description="Compara el total de actividades (32 principales) contra todos los entregables con fecha de Remisión al INE (54)." hint="Las barras moradas representan las 32 actividades principales por mes de término. Las azules incluyen las 22 sub-entregas adicionales con remisión al INE." icon={<BarChart3 className="w-4 h-4" />} chartId="prep-monthly-bar" />
+              <div id="prep-monthly-bar">
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={comparisonChartData} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 88%)" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} interval={0} />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ backgroundColor: 'hsl(0, 0%, 100%)', border: '1px solid hsl(220, 16%, 88%)', borderRadius: '8px', fontSize: '12px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                    <Bar dataKey="prep32" name="Actividades PREP (32)" fill="hsl(320, 70%, 55%)" radius={[4, 4, 0, 0]} barSize={18}>
+                      <LabelList dataKey="prep32" position="top" fill="hsl(320, 70%, 45%)" fontSize={10} fontWeight={700} />
+                    </Bar>
+                    <Bar dataKey="prep54" name="Actividades PREP (54)" fill="hsl(220, 70%, 60%)" radius={[4, 4, 0, 0]} barSize={18}>
+                      <LabelList dataKey="prep54" position="top" fill="hsl(220, 70%, 50%)" fontSize={10} fontWeight={700} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Area progress */}
+            <div className="stat-card">
+              <SectionHeader title="Avance por área responsable" description="Cómo va cada área con sus entregables asignados." hint="Las áreas con más actividades requieren mayor seguimiento. El porcentaje muestra entregados respecto al total del área." icon={<Building className="w-4 h-4" />} xlsxData={areaXlsx} xlsxFilename="prep_avance_areas" />
+              <div className="space-y-3">
+                {Object.entries(areaGroups).sort((a, b) => b[1].total - a[1].total).map(([area, data]) => {
+                  const pct = data.total > 0 ? Math.round((data.entregado / data.total) * 100) : 0;
+                  return (
+                    <div key={area} className="border-b border-border/30 pb-3 last:border-0">
+                      <div className="flex items-center justify-between mb-1.5 gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm font-bold text-foreground truncate">{area}</span>
+                          <Badge variant="outline" className="text-[10px]">{data.total} actividades</Badge>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* ══════════════════════════════════════ */}
-              {/* SUB-TAB: 54 ENTREGABLES              */}
-              {/* ══════════════════════════════════════ */}
-              {!isInvitado && (
-              <TabsContent value="ent54" className="space-y-6 mt-4">
-                {renderExecutiveSummary(prep54Stats, prep54Progress, 0, "54 Entregables (incluye sub-entregables)", entregables54Gantt.length)}
-                {renderKpiCards(prep54Stats, prep54Progress, 0)}
-                {renderPieCharts(prep54PieByYear, prep54PieByStatus, "prep54")}
-
-                {/* Cumulative monthly progress for 54 */}
-                <div className="stat-card">
-                  <SectionHeader title="¿Cómo avanzamos mes a mes?" description={`Barras: entregables que terminan ese mes. Línea verde: avance acumulado. Línea punteada: meta total (${entregables54Gantt.length}).`} hint="Permite ver el ritmo esperado de entregas y el progreso acumulado hacia la meta de los 54 entregables." icon={<TrendingUp className="w-4 h-4" />} chartId="prep54-cumulative-chart" />
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs text-muted-foreground">Ver mes:</span>
-                    <Select value={selectedMonth54} onValueChange={setSelectedMonth54}>
-                      <SelectTrigger className="h-7 w-44 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos los meses</SelectItem>
-                        {monthlyData54.map(m => <SelectItem key={m.key} value={m.key}>{m.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div id="prep54-cumulative-chart">
-                    <ResponsiveContainer width="100%" height={500}>
-                      <ComposedChart data={selectedMonth54 === 'all' ? monthlyData54 : monthlyData54.filter(m => m.key === selectedMonth54)} margin={{ top: 30, right: 20, left: 10, bottom: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 88%)" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={{ stroke: 'hsl(220, 16%, 88%)' }} interval={0} />
-                        <YAxis yAxisId="left" orientation="left" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} />
-                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} domain={[0, entregables54Gantt.length]} />
-                        <Tooltip contentStyle={{ backgroundColor: 'hsl(0, 0%, 100%)', border: '1px solid hsl(220, 16%, 88%)', borderRadius: '8px', fontSize: '12px' }} />
-                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }} />
-                        <Line yAxisId="right" dataKey="objetivo" name={`Meta (${entregables54Gantt.length})`} stroke="hsl(220, 10%, 60%)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
-                        <Bar yAxisId="left" dataKey="actividades" name="Entregables del Mes" fill="hsl(330, 70%, 60%)" radius={[4, 4, 0, 0]} barSize={50}>
-                          {(selectedMonth54 === 'all' ? monthlyData54 : monthlyData54.filter(m => m.key === selectedMonth54)).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry?.isCompleted ? "hsl(152, 60%, 40%)" : (entry?.isInProcess ? "hsl(200, 70%, 50%)" : "hsl(330, 70%, 60%)")} />
-                          ))}
-                          <LabelList content={CustomBarLabel54} />
-                        </Bar>
-                        <Line yAxisId="right" dataKey="acumulado" name="Acumulado" stroke="hsl(152, 60%, 36%)" strokeWidth={2.5} dot={{ r: 3, fill: 'hsl(152, 60%, 36%)', stroke: 'white', strokeWidth: 2 }}>
-                          <LabelList content={CustomAccumulatedLabel54} />
-                        </Line>
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Monthly breakdown table for 54 */}
-                <div className="stat-card">
-                  <SectionHeader title="Desglose mensual — 54 Entregables" description="Todos los entregables (incluyendo sub-entregables) por mes según la fecha de Remisión al INE." icon={<Calendar className="w-4 h-4" />} xlsxData={prepXlsx54} xlsxFilename="prep_54_desglose_mensual" />
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Mes</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Año</th>
-                          <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">Entregables</th>
-                          <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">Acumulado (%)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {prepMonthlyTable54.map((row, i) => (
-                          <tr key={i} className="border-b border-border/30">
-                            <td className="py-2 px-3 text-foreground">{row.month}</td>
-                            <td className="py-2 px-3 text-foreground">{row.year}</td>
-                            <td className="py-2 px-3 text-center font-bold text-info">{row.count || '—'}</td>
-                            <td className="py-2 px-3 text-center text-muted-foreground font-medium">{row.porcentaje}</td>
-                          </tr>
-                        ))}
-                        <tr className="bg-muted/30 font-bold">
-                          <td className="py-2 px-3 text-foreground" colSpan={2}>Total</td>
-                          <td className="py-2 px-3 text-center text-info">{prepMonthlyTable54.reduce((s, r) => s + r.count, 0)}</td>
-                          <td className="py-2 px-3 text-center text-muted-foreground">100%</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {renderAreaProgress(areaGroups54, areaXlsx54, "prep54")}
-
-                {/* Upcoming deadlines for 54 */}
-                <div className="stat-card">
-                  <SectionHeader title="Próximos vencimientos" description="Las 10 actividades más cercanas a su fecha de término que aún no se entregan (incluyendo sub-entregables)." icon={<Calendar className="w-4 h-4" />} xlsxData={upcoming54Xlsx} xlsxFilename="prep54_proximos_vencimientos" />
-                  <div className="space-y-2">
-                    {upcoming54.length === 0 && <p className="text-sm text-muted-foreground">No hay próximos vencimientos.</p>}
-                    {upcoming54.map((a, idx) => {
-                      const dias = Math.ceil((new Date(a.termino).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                      const fecha = new Date(a.termino + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' });
-                      return (
-                        <div key={`${a.entregable}-${idx}`} className="flex items-center justify-between gap-3 py-1.5 border-b border-border/30 last:border-0">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <span className="text-xs text-muted-foreground w-8 text-right">{a.entregable}</span>
-                            <span className="text-sm text-foreground truncate">{a.actividad}</span>
-                            {!a.isMain && <Badge variant="outline" className="text-[9px] shrink-0">Sub</Badge>}
-                          </div>
-                          <div className="flex items-center gap-3 text-xs shrink-0">
-                            <span className={dias <= 30 ? 'text-destructive font-semibold' : dias <= 90 ? 'text-warning' : 'text-muted-foreground'}>{dias}d restantes</span>
-                            <span className="text-muted-foreground">{fecha}</span>
-                          </div>
+                        <div className="flex items-center gap-3 text-xs shrink-0">
+                          <span className="text-success">{data.entregado} ✓</span>
+                          <span className="text-info">{data.enProceso} ◐</span>
+                          <span className="text-muted-foreground">{data.pendiente} =</span>
+                          <span className="font-bold text-foreground w-10 text-right">{pct}%</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </TabsContent>
-              )}
+                      </div>
+                      <Progress value={pct} className="h-1.5" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
-              {!isInvitado && (
-              <TabsContent value="comparativo" className="space-y-6 mt-4">
-                {/* Comparison executive summary */}
-                <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-background to-info/5 p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
-                      <GitCompareArrows className="w-5 h-5" />
+            {/* Upcoming deadlines */}
+            <div className="stat-card">
+              <SectionHeader title="Próximos vencimientos" description="Las 10 actividades más cercanas a su fecha de término que aún no se entregan." icon={<Calendar className="w-4 h-4" />} xlsxData={upcomingXlsx} xlsxFilename="prep_proximos_vencimientos" />
+              <div className="space-y-2">
+                {upcoming.length === 0 && <p className="text-sm text-muted-foreground">No hay próximos vencimientos.</p>}
+                {upcoming.map((a) => {
+                  const dias = Math.ceil((new Date(a.proyeccion.termino).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  const fecha = new Date(a.proyeccion.termino + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' });
+                  return (
+                    <div key={a.id} className="flex items-center justify-between gap-3 py-1.5 border-b border-border/30 last:border-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="text-xs text-muted-foreground w-6 text-right">{a.entregable}</span>
+                        <span className="text-sm text-foreground truncate">{a.actividad}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs shrink-0">
+                        <span className={dias <= 30 ? 'text-destructive font-semibold' : dias <= 90 ? 'text-warning' : 'text-muted-foreground'}>{dias}d restantes</span>
+                        <span className="text-muted-foreground">{fecha}</span>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <h2 className="text-sm font-semibold text-foreground">Comparativo — 32 vs 54 Entregables</h2>
-                      <p className="text-sm text-foreground/90 mt-1 leading-relaxed">
-                        Los <span className="font-semibold text-primary">32 entregables principales</span> tienen un avance de <span className="font-semibold text-primary">{comparisonKpis.progress32}%</span>, mientras que
-                        los <span className="font-semibold text-info">54 entregables totales</span> (incluyendo sub-entregables) tienen un avance de <span className="font-semibold text-info">{comparisonKpis.progress54}%</span>.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Comparison KPI cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="stat-card border-l-4 border-l-primary">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Package className="w-5 h-5 text-primary" />
-                      <h3 className="text-sm font-bold text-foreground">32 Entregables Principales</h3>
-                    </div>
-                    <div className="text-3xl font-bold text-primary mb-2">{comparisonKpis.progress32}%</div>
-                    <Progress value={comparisonKpis.progress32} className="h-2 mb-3" />
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline" className="text-[10px] gap-1"><CheckCircle2 className="w-3 h-3 text-success" />{comparisonKpis.entregado32} entregados</Badge>
-                      <Badge variant="outline" className="text-[10px] gap-1"><Clock className="w-3 h-3 text-info" />{comparisonKpis.enProceso32} en proceso</Badge>
-                      <Badge variant="outline" className="text-[10px] gap-1">{comparisonKpis.pendiente32} pendientes</Badge>
-                    </div>
-                  </div>
-                  <div className="stat-card border-l-4 border-l-info">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Layers className="w-5 h-5 text-info" />
-                      <h3 className="text-sm font-bold text-foreground">54 Entregables Totales</h3>
-                    </div>
-                    <div className="text-3xl font-bold text-info mb-2">{comparisonKpis.progress54}%</div>
-                    <Progress value={comparisonKpis.progress54} className="h-2 mb-3" />
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline" className="text-[10px] gap-1"><CheckCircle2 className="w-3 h-3 text-success" />{comparisonKpis.entregado54} entregados</Badge>
-                      <Badge variant="outline" className="text-[10px] gap-1"><Clock className="w-3 h-3 text-info" />{comparisonKpis.enProceso54} en proceso</Badge>
-                      <Badge variant="outline" className="text-[10px] gap-1">{comparisonKpis.pendiente54} pendientes</Badge>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Comparison pie charts: status side by side */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="stat-card">
-                    <SectionHeader title="Estatus — 32 Entregables" icon={<PieIcon className="w-4 h-4" />} chartId="comp-pie-32" />
-                    <div id="comp-pie-32">
-                      <ResponsiveContainer width="100%" height={250}>
-                        <PieChart>
-                          <Pie data={prepPieByStatus} cx="50%" cy="50%" labelLine={false} label={renderCustomizedLabel} outerRadius={90} dataKey="value">
-                            {prepPieByStatus.map((d, i) => <Cell key={i} fill={STATUS_COLORS[["Pendiente","En Proceso","Entregado"].indexOf(d.name)] || PIE_COLORS[i]} />)}
-                          </Pie>
-                          <Tooltip formatter={(value: number) => [`${value} actividades`, '']} />
-                          <Legend formatter={(value) => <span className="text-xs text-foreground">{value}</span>} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <SectionHeader title="Estatus — 54 Entregables" icon={<PieIcon className="w-4 h-4" />} chartId="comp-pie-54" />
-                    <div id="comp-pie-54">
-                      <ResponsiveContainer width="100%" height={250}>
-                        <PieChart>
-                          <Pie data={prep54PieByStatus} cx="50%" cy="50%" labelLine={false} label={renderCustomizedLabel} outerRadius={90} dataKey="value">
-                            {prep54PieByStatus.map((d, i) => <Cell key={i} fill={STATUS_COLORS[["Pendiente","En Proceso","Entregado"].indexOf(d.name)] || PIE_COLORS[i]} />)}
-                          </Pie>
-                          <Tooltip formatter={(value: number) => [`${value} actividades`, '']} />
-                          <Legend formatter={(value) => <span className="text-xs text-foreground">{value}</span>} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Monthly comparison table */}
-                <div className="stat-card">
-                  <SectionHeader title="Desglose mensual comparativo" description="Entregables por mes según la fecha de Remisión al INE. Comparativo entre los 32 entregables principales y los 54 totales." icon={<Calendar className="w-4 h-4" />} xlsxData={compXlsx} xlsxFilename="prep_comparativo_mensual" />
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Mes</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Año</th>
-                          <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">32 entregables</th>
-                          <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">54 entregables</th>
-                          <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">Diferencia</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {monthlyCombinedTable.map((row, i) => (
-                          <tr key={i} className="border-b border-border/30">
-                            <td className="py-2 px-3 text-foreground">{row.month}</td>
-                            <td className="py-2 px-3 text-foreground">{row.year}</td>
-                            <td className="py-2 px-3 text-center font-bold text-primary">{row.termino || '—'}</td>
-                            <td className="py-2 px-3 text-center font-bold text-info">{row.remision || '—'}</td>
-                            <td className="py-2 px-3 text-center text-muted-foreground font-medium">{row.remision - row.termino > 0 ? `+${row.remision - row.termino}` : '—'}</td>
-                          </tr>
-                        ))}
-                        <tr className="bg-muted/30 font-bold">
-                          <td className="py-2 px-3 text-foreground" colSpan={2}>Total</td>
-                          <td className="py-2 px-3 text-center text-primary">{monthlyCombinedTable.reduce((s, r) => s + r.termino, 0)}</td>
-                          <td className="py-2 px-3 text-center text-info">{monthlyCombinedTable.reduce((s, r) => s + r.remision, 0)}</td>
-                          <td className="py-2 px-3 text-center text-muted-foreground">{monthlyCombinedTable.reduce((s, r) => s + r.remision, 0) - monthlyCombinedTable.reduce((s, r) => s + r.termino, 0)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Comparison bar chart */}
-                <div className="stat-card">
-                  <SectionHeader title="Carga de trabajo por mes — 32 vs 54" description="Compara el total de actividades principales (32) contra todos los entregables con fecha de Remisión al INE (54)." hint="Las barras moradas representan las 32 actividades principales. Las azules incluyen las sub-entregas adicionales." icon={<BarChart3 className="w-4 h-4" />} chartId="comp-monthly-bar" />
-                  <div id="comp-monthly-bar">
-                    <ResponsiveContainer width="100%" height={450}>
-                      <BarChart data={comparisonChartData} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 88%)" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} interval={0} />
-                        <YAxis tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} />
-                        <Tooltip contentStyle={{ backgroundColor: 'hsl(0, 0%, 100%)', border: '1px solid hsl(220, 16%, 88%)', borderRadius: '8px', fontSize: '12px' }} />
-                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                        <Bar dataKey="prep32" name="32 Entregables" fill="hsl(320, 70%, 55%)" radius={[4, 4, 0, 0]} barSize={35}>
-                          <LabelList dataKey="prep32" position="top" fill="hsl(320, 70%, 45%)" fontSize={10} fontWeight={700} />
-                        </Bar>
-                        <Bar dataKey="prep54" name="54 Entregables" fill="hsl(220, 70%, 60%)" radius={[4, 4, 0, 0]} barSize={35}>
-                          <LabelList dataKey="prep54" position="top" fill="hsl(220, 70%, 50%)" fontSize={10} fontWeight={700} />
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </TabsContent>
-              )}
-            </Tabs>
+                  );
+                })}
+              </div>
+            </div>
           </TabsContent>
 
           {/* Histórico Tab */}
@@ -1405,18 +801,17 @@ export default function ReportesPage() {
             <div className="stat-card">
               <SectionHeader title="Avance mes a mes (histórico)" description="Barras: actividades terminadas por mes. Línea verde: acumulado total." hint="Permite comparar la intensidad de trabajo mes a mes durante el periodo histórico." icon={<TrendingUp className="w-4 h-4" />} chartId="historico-cumulative-chart" />
               <div id="historico-cumulative-chart">
-                <ResponsiveContainer width="100%" height={500}>
+                <ResponsiveContainer width="100%" height={380}>
                   <ComposedChart data={historicoMonthly} margin={{ top: 30, right: 20, left: 10, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 88%)" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={{ stroke: 'hsl(220, 16%, 88%)' }} interval={1} />
-                    <YAxis yAxisId="left" orientation="left" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} domain={[0, 'auto']} />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} domain={[0, 'auto']} />
                     <Tooltip contentStyle={{ backgroundColor: 'hsl(0, 0%, 100%)', border: '1px solid hsl(220, 16%, 88%)', borderRadius: '8px', fontSize: '12px' }} />
                     <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }} />
-                    <Bar yAxisId="left" dataKey="actividades" name="Actividades del Mes" fill="hsl(200, 70%, 50%)" radius={[4, 4, 0, 0]} barSize={50}>
+                    <Bar dataKey="actividades" name="Actividades del Mes" fill="hsl(200, 70%, 50%)" radius={[4, 4, 0, 0]} barSize={24}>
                       <LabelList dataKey="actividades" position="top" fill="hsl(200, 70%, 40%)" fontSize={10} fontWeight={700} />
                     </Bar>
-                    <Line yAxisId="right" dataKey="acumulado" name="Acumulado" stroke="hsl(152, 60%, 36%)" strokeWidth={2.5} dot={{ r: 3, fill: 'hsl(152, 60%, 36%)', stroke: 'white', strokeWidth: 2 }} />
+                    <Line dataKey="acumulado" name="Acumulado" stroke="hsl(152, 60%, 36%)" strokeWidth={2.5} dot={{ r: 3, fill: 'hsl(152, 60%, 36%)', stroke: 'white', strokeWidth: 2 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>

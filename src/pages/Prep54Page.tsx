@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   PlayCircle,
   Clock,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as XLSX from "xlsx";
@@ -671,23 +672,18 @@ export default function Prep54Page() {
 
   // KPIs
   const kpis = useMemo(() => {
-    const directas = filtered.filter(
-      (e) => e.estatusRelacion === "RELACIÓN DIRECTA"
-    ).length;
-    const sinRelacion = filtered.filter(
-      (e) => e.estatusRelacion === "SIN RELACIÓN"
-    ).length;
     const temas = new Set(filtered.map((e) => e.tema)).size;
     
-    let completados = 0, enProceso = 0, pendientes = 0;
+    let completados = 0, porEntregar = 0, enProceso = 0, pendientes = 0;
     filtered.forEach(item => {
       const status = getTemporalStatus(item);
       if (status === 'completado') completados++;
+      else if (status === 'por_entregar') porEntregar++;
       else if (status === 'en_proceso') enProceso++;
       else pendientes++;
     });
 
-    return { total: filtered.length, directas, sinRelacion, temas, completados, enProceso, pendientes };
+    return { total: filtered.length, temas, completados, porEntregar, enProceso, pendientes };
   }, [filtered]);
 
   const toggleTema = (tema: string) => {
@@ -1074,28 +1070,22 @@ export default function Prep54Page() {
             accent="#22c55e"
           />
           <KpiCard
+            icon={Package}
+            label="Por Entregar"
+            value={kpis.porEntregar}
+            accent="#a855f7"
+          />
+          <KpiCard
             icon={PlayCircle}
             label="En Proceso"
             value={kpis.enProceso}
-            accent="#eab308"
+            accent="#3b82f6"
           />
           <KpiCard
             icon={Clock}
             label="Pendientes"
             value={kpis.pendientes}
-            accent="#8b5cf6"
-          />
-          <KpiCard
-            icon={Link2}
-            label="Rel. Directas"
-            value={kpis.directas}
-            accent="#22c55e"
-          />
-          <KpiCard
-            icon={Info}
-            label="Sin Relación"
-            value={kpis.sinRelacion}
-            accent="#ef4444"
+            accent="#f97316"
           />
           <KpiCard
             icon={Calendar}

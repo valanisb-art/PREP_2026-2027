@@ -105,12 +105,11 @@ export default function AdminPage() {
     if (!editingUser) return;
     setSaving(true);
     try {
-      // 1. Guardar rol
+      // 1. Guardar rol en user_roles
       if (formData.role !== editingUser.role) {
         await supabase
           .from("user_roles")
-          .update({ role: formData.role })
-          .eq("user_id", editingUser.id);
+          .upsert({ user_id: editingUser.id, role: formData.role });
       }
 
       // 2. Guardar perfil
@@ -150,15 +149,22 @@ export default function AdminPage() {
   };
 
   const handleDeleteUser = async (user: UserWithRole) => {
-    const { error } = await supabase
+    // 1. Borramos el rol
+    await supabase
       .from("user_roles")
       .delete()
       .eq("user_id", user.id);
+      
+    // 2. Borramos el perfil para que ya no aparezca en la tabla
+    const { error } = await supabase
+      .from("profiles")
+      .delete()
+      .eq("id", user.id);
 
     if (error) {
-      toast.error("Error al eliminar usuario", { description: error.message });
+      toast.error("Error al eliminar perfil", { description: error.message });
     } else {
-      toast.success(`Usuario ${user.full_name || user.email} eliminado`);
+      toast.success(`Usuario ${user.full_name || user.email} eliminado del dashboard`);
       setDeleteDialog({ open: false, user: null });
       fetchUsers();
     }
