@@ -82,9 +82,10 @@ export default function StatusChanger({
   if (isAdmin) {
     if (compact) {
       const getStatusColor = (status: string) => {
-        if (status === 'Entregado') return 'text-success font-semibold';
+        if (status === 'Entregado') return 'text-green-500 font-semibold';
         if (status === 'En Proceso') return 'text-blue-500 font-semibold';
-        return 'text-warning font-semibold';
+        if (status === 'Por entregar') return 'text-purple-500 font-semibold';
+        return 'text-amber-500 font-semibold';
       };
 
       return (
@@ -99,6 +100,7 @@ export default function StatusChanger({
           <SelectContent>
             <SelectItem value="Pendiente" className="text-[10px]">Pendiente</SelectItem>
             <SelectItem value="En Proceso" className="text-[10px]">En Proceso</SelectItem>
+            <SelectItem value="Por entregar" className="text-[10px]">Por entregar</SelectItem>
             <SelectItem value="Entregado" className="text-[10px]">Entregado</SelectItem>
           </SelectContent>
         </Select>
@@ -118,6 +120,7 @@ export default function StatusChanger({
           <SelectContent>
             <SelectItem value="Pendiente">Pendiente</SelectItem>
             <SelectItem value="En Proceso">En Proceso</SelectItem>
+            <SelectItem value="Por entregar">Por entregar</SelectItem>
             <SelectItem value="Entregado">Entregado</SelectItem>
           </SelectContent>
         </Select>

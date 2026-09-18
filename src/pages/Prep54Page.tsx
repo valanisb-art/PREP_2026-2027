@@ -480,10 +480,19 @@ export default function Prep54Page() {
     const currMonth = today.getMonth();
     
     let autoStatus = 'Pendiente';
-    if (finYear < currYear || (finYear === currYear && finMonth < currMonth)) {
+    
+    const absFinMonth = finYear * 12 + finMonth;
+    const absCurrMonth = currYear * 12 + currMonth;
+    
+    if (absFinMonth <= absCurrMonth) {
       autoStatus = 'Entregado';
-    } else if (finYear === currYear && finMonth === currMonth) {
-      autoStatus = 'En Proceso';
+    } else if (absFinMonth === absCurrMonth + 1) {
+      autoStatus = 'Por entregar';
+    } else {
+      const inicioDate = parseDate(item.inicio);
+      if (inicioDate <= today) {
+        autoStatus = 'En Proceso';
+      }
     }
 
     if (matchData && matchData.activity.status && matchData.activity.status !== 'Pendiente') {
@@ -494,9 +503,10 @@ export default function Prep54Page() {
   };
 
   const getStatusColor = (status: string) => {
-    if (status === 'Entregado') return 'text-success font-semibold';
+    if (status === 'Entregado') return 'text-green-500 font-semibold';
     if (status === 'En Proceso') return 'text-blue-500 font-semibold';
-    return 'text-warning font-semibold';
+    if (status === 'Por entregar') return 'text-purple-500 font-semibold';
+    return 'text-amber-500 font-semibold';
   };
 
   const [searchQuery, setSearchQuery] = useState("");
