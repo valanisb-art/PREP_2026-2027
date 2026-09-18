@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, BarChart3, AlertTriangle, Building, Calendar, TrendingUp, Users, Download, Image, RefreshCw, HelpCircle, Sparkles, CheckCircle2, Clock, Target, Package, Package, Package, PieChart as PieIcon } from "lucide-react";
+import { FileText, BarChart3, AlertTriangle, Building, Calendar, TrendingUp, Users, Download, Image, RefreshCw, HelpCircle, Sparkles, CheckCircle2, Clock, Target, Package, Layers, ArrowRightLeft, PieChart as PieIcon } from "lucide-react";
 import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -564,10 +564,19 @@ export default function ReportesPage() {
           { /* PREP Tab */ }
           <TabsContent value="prep" className="mt-4">
       <Tabs defaultValue="32" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-6">
-          <TabsTrigger value="32">32 Entregables</TabsTrigger>
-          <TabsTrigger value="54">54 Entregables</TabsTrigger>
-          <TabsTrigger value="comparativo">Comparativo</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3 mb-6 bg-muted/50 p-1 rounded-lg">
+          <TabsTrigger value="32" className="flex items-center justify-center gap-2">
+            <Package className="w-4 h-4" />
+            <span>32 Entregables</span>
+          </TabsTrigger>
+          <TabsTrigger value="54" className="flex items-center justify-center gap-2">
+            <Layers className="w-4 h-4" />
+            <span>54 Entregables</span>
+          </TabsTrigger>
+          <TabsTrigger value="comparativo" className="flex items-center justify-center gap-2">
+            <RefreshCw className="w-4 h-4" />
+            <span>Comparativo</span>
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="32" className="space-y-6">
             {/* Executive summary */}
