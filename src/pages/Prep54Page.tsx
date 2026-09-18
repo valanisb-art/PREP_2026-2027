@@ -234,12 +234,27 @@ function Tooltip({
           <span className="text-foreground font-medium">{dias} días</span>
           <span className="text-muted-foreground">Estatus</span>
           {(() => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
             const finDate = parseDate(item.fin);
-            const inicioDate = parseDate(item.inicio);
-            if (today > finDate) return <span className="font-semibold" style={{ color: "#22c55e" }}>✓ Completado</span>;
-            if (today >= inicioDate && today <= finDate) return <span className="font-semibold" style={{ color: "#eab308" }}>● En Proceso</span>;
+            const finYear = finDate.getFullYear();
+            const finMonth = finDate.getMonth();
+            
+            const today = new Date();
+            const currYear = today.getFullYear();
+            const currMonth = today.getMonth();
+            
+            const absFinMonth = finYear * 12 + finMonth;
+            const absCurrMonth = currYear * 12 + currMonth;
+            
+            if (absFinMonth <= absCurrMonth) {
+              return <span className="font-semibold" style={{ color: "#22c55e" }}>✓ Entregado</span>;
+            } else if (absFinMonth === absCurrMonth + 1) {
+              return <span className="font-semibold" style={{ color: "#a855f7" }}>● Por entregar</span>;
+            } else {
+              const inicioDate = parseDate(item.inicio);
+              if (inicioDate <= today) {
+                return <span className="font-semibold" style={{ color: "#3b82f6" }}>● En Proceso</span>;
+              }
+            }
             return <span className="font-semibold text-muted-foreground">○ Pendiente</span>;
           })()}
           <span className="text-muted-foreground">Relación</span>
@@ -342,19 +357,31 @@ function FilterDropdown({
 /* ── Gantt Bar Row (shared between views) ────────────────────── */
 
 /** Determine temporal status of an entregable based on today's date */
-function getTemporalStatus(item: Entregable54Gantt): "completado" | "en_proceso" | "futuro" {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+function getTemporalStatus(item: Entregable54Gantt): "completado" | "por_entregar" | "en_proceso" | "futuro" {
   const finDate = parseDate(item.fin);
+  const finYear = finDate.getFullYear();
+  const finMonth = finDate.getMonth();
+  
+  const today = new Date();
+  const currYear = today.getFullYear();
+  const currMonth = today.getMonth();
+  
+  const absFinMonth = finYear * 12 + finMonth;
+  const absCurrMonth = currYear * 12 + currMonth;
+  
+  if (absFinMonth <= absCurrMonth) return "completado";
+  if (absFinMonth === absCurrMonth + 1) return "por_entregar";
+  
   const inicioDate = parseDate(item.inicio);
-  if (today > finDate) return "completado";
-  if (today >= inicioDate && today <= finDate) return "en_proceso";
+  if (inicioDate <= today) return "en_proceso";
+  
   return "futuro";
 }
 
-const TEMPORAL_COLORS = {
+const TEMPORAL_COLORS: Record<string, string | null> = {
   completado: "#22c55e",    // green
-  en_proceso: "#eab308",    // yellow/amber
+  por_entregar: "#a855f7",  // purple
+  en_proceso: "#3b82f6",    // blue
   futuro: null,             // uses tema color
 };
 
