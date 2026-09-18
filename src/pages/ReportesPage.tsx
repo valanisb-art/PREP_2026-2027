@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import AppLayout from "@/components/AppLayout";
 import { activities, getStats } from "@/data/activities";
 import { sessions } from "@/data/sessions";
@@ -37,7 +37,7 @@ function SectionHeader({ title, icon, description, hint, chartId, xlsxData, xlsx
           {hint && (
             <UITooltip>
               <TooltipTrigger asChild>
-                <button type="button" aria-label="MÃ¡s informaciÃ³n" className="text-muted-foreground hover:text-foreground transition-colors">
+                <button type="button" aria-label="Más información" className="text-muted-foreground hover:text-foreground transition-colors">
                   <HelpCircle className="w-3.5 h-3.5" />
                 </button>
               </TooltipTrigger>
@@ -74,28 +74,6 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
     </text>
   );
 };
-
-function parseDate(s: string) {
-  return new Date(s + "T00:00:00");
-}
-
-function getTemporalStatus(item: { inicio: string; fin: string }): "completado" | "por_entregar" | "en_proceso" | "futuro" {
-  const finDate = parseDate(item.fin);
-  const finYear = finDate.getFullYear();
-  const finMonth = finDate.getMonth();
-  const today = new Date();
-  const currYear = today.getFullYear();
-  const currMonth = today.getMonth();
-  const absFinMonth = finYear * 12 + finMonth;
-  const absCurrMonth = currYear * 12 + currMonth;
-  
-  if (absFinMonth <= absCurrMonth) return "completado";
-  if (absFinMonth === absCurrMonth + 1) return "por_entregar";
-  
-  const inicioDate = parseDate(item.inicio);
-  if (inicioDate <= today) return "en_proceso";
-  return "futuro";
-}
 
 export default function ReportesPage() {
   const [prepStatusOverrides, setPrepStatusOverrides] = useState<Record<number, ActivityStatus>>({});
@@ -138,7 +116,7 @@ export default function ReportesPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // --- PREP data (proyecciÃ³n) ---
+  // --- PREP data (proyección) ---
   const prepActivities = useMemo(() => {
     const staticActs = activities
       .filter(a => !deletedIds.has(a.id))
@@ -179,7 +157,7 @@ export default function ReportesPage() {
     return [...staticActs, ...customActs];
   }, [prepStatusOverrides, customActivities, deletedIds, dateOverrides]);
 
-  // --- HistÃ³rico data ---
+  // --- Histórico data ---
   const historicoActivities = useMemo(() => {
     return activities
       .filter(a => {
@@ -193,30 +171,20 @@ export default function ReportesPage() {
       }));
   }, [historicoStatusOverrides]);
 
-  // PREP 54 stats
-  const entregables54Gantt = useMemo(() => {
-    return entregables54.map(e => ({
-      inicio: e.remisionINE || '2026-01-01',
-      fin: e.remisionINE || '2027-12-31',
-      ...e
-    }));
-  }, []);
-
-  const prep54Stats = useMemo(() => {
-    let pendiente = 0, enProceso = 0, entregado = 0, porEntregar = 0;
-    entregables54Gantt.forEach(a => {
-      const status = getTemporalStatus(a);
-      if (status === 'completado') entregado++;
-      else if (status === 'por_entregar') porEntregar++;
-      else if (status === 'en_proceso') enProceso++;
+  // PREP stats
+  const prepStats = useMemo(() => {
+    let pendiente = 0, enProceso = 0, entregado = 0;
+    prepActivities.forEach(a => {
+      if (a.status === 'Entregado') entregado++;
+      else if (a.status === 'En Proceso') enProceso++;
       else pendiente++;
     });
-    return { total: entregables54Gantt.length, pendiente, enProceso, entregado, porEntregar };
-  }, [entregables54Gantt]);
+    return { total: prepActivities.length, pendiente, enProceso, entregado };
+  }, [prepActivities]);
 
-  const prep54Progress = prep54Stats.total > 0 ? Math.round((prep54Stats.entregado / prep54Stats.total) * 100) : 0;
+  const prepProgress = prepStats.total > 0 ? Math.round((prepStats.entregado / prepStats.total) * 100) : 0;
 
-  // HistÃ³rico stats
+  // Histórico stats
   const histStats = useMemo(() => {
     let pendiente = 0, enProceso = 0, entregado = 0;
     historicoActivities.forEach(a => {
@@ -231,7 +199,7 @@ export default function ReportesPage() {
   const areaGroups = useMemo(() => {
     const groups: Record<string, { total: number; entregado: number; enProceso: number; pendiente: number }> = {};
     for (const act of prepActivities) {
-      const area = act.areaResponsable || 'Sin Ã¡rea';
+      const area = act.areaResponsable || 'Sin área';
       if (!groups[area]) groups[area] = { total: 0, entregado: 0, enProceso: 0, pendiente: 0 };
       groups[area].total++;
       if (act.status === 'Entregado') groups[area].entregado++;
@@ -244,7 +212,7 @@ export default function ReportesPage() {
   const criticalActivities = prepActivities.filter(a => a.situacionCritica && a.situacionCritica.trim() !== '');
   const upcoming = [...prepActivities].filter(a => a.status !== 'Entregado' && a.proyeccion.termino).sort((a, b) => new Date(a.proyeccion.termino).getTime() - new Date(b.proyeccion.termino).getTime()).slice(0, 10);
 
-  // PREP monthly data â€” based on the 32 main entregables' RemisiÃ³n al INE dates
+  // PREP monthly data — based on the 32 main entregables' Remisión al INE dates
   const monthlyData = useMemo(() => {
     const monthCounts: Record<string, number> = {};
     for (const e of entregables54.filter(e => e.isMain && e.remisionINE)) {
@@ -280,7 +248,7 @@ export default function ReportesPage() {
     return Object.values(data).sort((a, b) => a.year !== b.year ? a.year - b.year : MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month));
   }, [prepActivities]);
 
-  // RemisiÃ³n al INE â€” counts per month based on the dates from the 32 entregables
+  // Remisión al INE — counts per month based on the dates from the 32 entregables
   // (or 54 if viewMode is set to expanded mode).
   const remisionMonthlyMap = useMemo(() => {
     const items = viewMode === '32' ? entregables54.filter(e => e.isMain) : entregables54;
@@ -294,7 +262,7 @@ export default function ReportesPage() {
     return map;
   }, [viewMode]);
 
-  // Side-by-side table: 32 main entregables vs all 54, both by RemisiÃ³n al INE
+  // Side-by-side table: 32 main entregables vs all 54, both by Remisión al INE
   const monthlyCombinedTable = useMemo(() => {
     const map32: Record<string, number> = {};
     const map54: Record<string, number> = {};
@@ -367,16 +335,15 @@ export default function ReportesPage() {
   }, [prepActivities]);
 
   // PREP pie chart by status
-  const prep54PieByStatus = useMemo(() => {
+  const prepPieByStatus = useMemo(() => {
     return [
-      { name: 'Pendiente', value: prep54Stats.pendiente },
-      { name: 'En Proceso', value: prep54Stats.enProceso },
-      { name: 'Por Entregar', value: prep54Stats.porEntregar },
-      { name: 'Entregado', value: prep54Stats.entregado },
+      { name: 'Pendiente', value: prepStats.pendiente },
+      { name: 'En Proceso', value: prepStats.enProceso },
+      { name: 'Entregado', value: prepStats.entregado },
     ].filter(d => d.value > 0);
-  }, [prep54Stats]);
+  }, [prepStats]);
 
-  // HistÃ³rico monthly
+  // Histórico monthly
   const historicoMonthly = useMemo(() => {
     const monthCounts: Record<string, number> = {};
     for (const act of historicoActivities) {
@@ -412,7 +379,7 @@ export default function ReportesPage() {
     return Object.values(data).sort((a, b) => a.year !== b.year ? a.year - b.year : MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month));
   }, [historicoActivities]);
 
-  // HistÃ³rico pie by year
+  // Histórico pie by year
   const histPieByYear = useMemo(() => {
     const yearCounts: Record<number, number> = {};
     for (const act of historicoActivities) {
@@ -427,7 +394,7 @@ export default function ReportesPage() {
     const result = { cepaprep: { extraordinarias: 0, ordinarias: 0, reuniones: 0 }, cg: { extraordinarias: 0, ordinarias: 0, reuniones: 0 } };
     for (const s of sessions) {
       const org = s.organo === 'CEPAPREP' ? 'cepaprep' : 'cg';
-      if (s.sesion === 'ReuniÃ³n de Trabajo') result[org].reuniones++;
+      if (s.sesion === 'Reunión de Trabajo') result[org].reuniones++;
       else if (s.tipo === 'Extraordinaria') result[org].extraordinarias++;
       else result[org].ordinarias++;
     }
@@ -450,75 +417,17 @@ export default function ReportesPage() {
     return <text x={x + width / 2} y={y - 5} textAnchor="middle" fill="hsl(270, 60%, 50%)" fontSize={11} fontWeight={700}>{value}</text>;
   };
 
-  const STATUS_COLORS = ["hsl(38, 92%, 50%)", "hsl(200, 70%, 50%)", "hsl(270, 70%, 60%)", "hsl(152, 60%, 36%)"];
+  const STATUS_COLORS = ["hsl(38, 92%, 50%)", "hsl(200, 70%, 50%)", "hsl(152, 60%, 36%)"];
 
-  // Renders executive summary
-  const renderExecutiveSummary = (stats: any, progress: number, critCount: number, label: string, total: number) => (
-    <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 to-info/5 p-5">
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
-          <Target className="w-5 h-5" />
-        </div>
-        <div className="flex-1">
-          <h2 className="text-sm font-semibold text-foreground">Resumen ejecutivo â€” {label}</h2>
-          <p className="text-sm text-foreground/90 mt-1 leading-relaxed">
-            Llevamos un <span className="font-semibold text-primary">{progress}%</span> de avance:{" "}
-            <span className="font-semibold text-success">{stats.entregado} entregadas</span>,{" "}
-            {stats.porEntregar !== undefined && <><span className="font-semibold text-[#a855f7]">{stats.porEntregar} por entregar</span>,{" "}</>}
-            <span className="font-semibold text-info">{stats.enProceso} en proceso</span> y{" "}
-            <span className="font-semibold text-warning">{stats.pendiente} pendientes</span> de un total de <span className="font-semibold">{stats.total}</span>.
-            {critCount > 0 && <> Hay <span className="font-semibold text-destructive">{critCount} situaciones crÃ­ticas</span> que requieren atenciÃ³n.</>}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Renders KPI cards
-  const renderKpiCards = (stats: any, progress: number, critCount: number) => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div className="stat-card">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center"><BarChart3 className="w-4 h-4" /></div>
-          <h3 className="text-xs font-semibold text-foreground">Â¿CÃ³mo vamos en general?</h3>
-        </div>
-        <div className="text-2xl font-bold text-foreground">{progress}%</div>
-        <Progress value={progress} className="h-1.5 mt-2" />
-        <p className="text-[11px] text-muted-foreground mt-2">Porcentaje de entregables completados</p>
-      </div>
-      <div className="stat-card">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-7 h-7 rounded-md bg-info/10 text-info flex items-center justify-center"><FileText className="w-4 h-4" /></div>
-          <h3 className="text-xs font-semibold text-foreground">Entregables totales</h3>
-        </div>
-        <div className="text-2xl font-bold text-foreground">{stats.total}</div>
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          <Badge variant="outline" className="text-[10px] gap-1"><CheckCircle2 className="w-3 h-3 text-success" />{stats.entregado} entregados</Badge>
-          {stats.porEntregar !== undefined && <Badge variant="outline" className="text-[10px] gap-1"><Package className="w-3 h-3 text-[#a855f7]" />{stats.porEntregar} por entregar</Badge>}
-          <Badge variant="outline" className="text-[10px] gap-1"><Clock className="w-3 h-3 text-info" />{stats.enProceso} en proceso</Badge>
-          <Badge variant="outline" className="text-[10px] gap-1">{stats.pendiente} pendientes</Badge>
-        </div>
-      </div>
-      <div className="stat-card">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-7 h-7 rounded-md bg-warning/10 text-warning flex items-center justify-center"><AlertTriangle className="w-4 h-4" /></div>
-          <h3 className="text-xs font-semibold text-foreground">Requieren atenciÃ³n</h3>
-        </div>
-        <div className="text-2xl font-bold text-foreground">{critCount}</div>
-        <p className="text-[11px] text-muted-foreground mt-2">Actividades marcadas como situaciÃ³n crÃ­tica</p>
-      </div>
-    </div>
-  );
-
-  const prepXlsx = monthlyCombinedTable.map(r => ({ Mes: r.month, AÃ±o: r.year, "32 entregables": r.termino, "54 entregables": r.remision }));
-  const historicoXlsx = historicoMonthlyTable.map(r => ({ Mes: r.month, AÃ±o: r.year, Actividades: r.count }));
+  const prepXlsx = monthlyCombinedTable.map(r => ({ Mes: r.month, Año: r.year, "32 entregables": r.termino, "54 entregables": r.remision }));
+  const historicoXlsx = historicoMonthlyTable.map(r => ({ Mes: r.month, Año: r.year, Actividades: r.count }));
   const upcomingXlsx = upcoming.map(a => ({
-    Entregable: a.entregable, Actividad: a.actividad, Ãrea: a.areaResponsable,
-    TÃ©rmino: a.proyeccion.termino ? new Date(a.proyeccion.termino).toLocaleDateString('es-MX') : '',
+    Entregable: a.entregable, Actividad: a.actividad, Área: a.areaResponsable,
+    Término: a.proyeccion.termino ? new Date(a.proyeccion.termino).toLocaleDateString('es-MX') : '',
     Estado: a.status,
   }));
   const areaXlsx = Object.entries(areaGroups).map(([area, d]) => ({
-    Ãrea: area, Total: d.total, Entregados: d.entregado, "En Proceso": d.enProceso, Pendientes: d.pendiente,
+    Área: area, Total: d.total, Entregados: d.entregado, "En Proceso": d.enProceso, Pendientes: d.pendiente,
     "Avance %": d.total > 0 ? Math.round((d.entregado / d.total) * 100) : 0,
   }));
 
@@ -535,13 +444,13 @@ export default function ReportesPage() {
               <div>
                 <h1 className="text-2xl font-bold text-foreground font-display">Reportes</h1>
                 <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-                  AquÃ­ puedes ver de un vistazo cÃ³mo va el PREP y consultar el histÃ³rico. Pasa el cursor sobre los iconos <HelpCircle className="inline w-3.5 h-3.5 -mt-0.5" /> para entender cada grÃ¡fica.
+                  Aquí puedes ver de un vistazo cómo va el PREP y consultar el histórico. Pasa el cursor sobre los iconos <HelpCircle className="inline w-3.5 h-3.5 -mt-0.5" /> para entender cada gráfica.
                 </p>
               </div>
             </div>
             <Button variant="outline" size="sm" className="gap-2 self-start md:self-auto" onClick={fetchData} disabled={refreshing}>
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Actualizandoâ€¦' : 'Actualizar datos'}
+              {refreshing ? 'Actualizando…' : 'Actualizar datos'}
             </Button>
           </div>
         </div>
@@ -549,21 +458,67 @@ export default function ReportesPage() {
         <Tabs defaultValue="prep" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="prep">PREP 26-27</TabsTrigger>
-            <TabsTrigger value="historico">HistÃ³rico</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
           </TabsList>
 
           {/* PREP Tab */}
           <TabsContent value="prep" className="space-y-6 mt-4">
             {/* Executive summary */}
-            {renderExecutiveSummary(prep54Stats, prep54Progress, criticalActivities.length, "PREP 54", prep54Stats.total)}
+            <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 to-info/5 p-5">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                  <Target className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-sm font-semibold text-foreground">Resumen ejecutivo</h2>
+                  <p className="text-sm text-foreground/90 mt-1 leading-relaxed">
+                    Llevamos un <span className="font-semibold text-primary">{prepProgress}%</span> de avance:{" "}
+                    <span className="font-semibold text-success">{prepStats.entregado} entregadas</span>,{" "}
+                    <span className="font-semibold text-info">{prepStats.enProceso} en proceso</span> y{" "}
+                    <span className="font-semibold text-warning">{prepStats.pendiente} pendientes</span> de un total de <span className="font-semibold">{prepStats.total}</span>.
+                    {criticalActivities.length > 0 && <> Hay <span className="font-semibold text-destructive">{criticalActivities.length} situaciones críticas</span> que requieren atención.</>}
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* KPI cards */}
-            {renderKpiCards(prep54Stats, prep54Progress, criticalActivities.length)}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="stat-card">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center"><BarChart3 className="w-4 h-4" /></div>
+                  <h3 className="text-xs font-semibold text-foreground">¿Cómo vamos en general?</h3>
+                </div>
+                <div className="text-2xl font-bold text-foreground">{prepProgress}%</div>
+                <Progress value={prepProgress} className="h-1.5 mt-2" />
+                <p className="text-[11px] text-muted-foreground mt-2">Porcentaje de entregables completados</p>
+              </div>
+              <div className="stat-card">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-md bg-info/10 text-info flex items-center justify-center"><FileText className="w-4 h-4" /></div>
+                  <h3 className="text-xs font-semibold text-foreground">Entregables totales</h3>
+                </div>
+                <div className="text-2xl font-bold text-foreground">{prepStats.total}</div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <Badge variant="outline" className="text-[10px] gap-1"><CheckCircle2 className="w-3 h-3 text-success" />{prepStats.entregado} entregados</Badge>
+                  <Badge variant="outline" className="text-[10px] gap-1"><Clock className="w-3 h-3 text-info" />{prepStats.enProceso} en proceso</Badge>
+                  <Badge variant="outline" className="text-[10px] gap-1">{prepStats.pendiente} pendientes</Badge>
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-md bg-warning/10 text-warning flex items-center justify-center"><AlertTriangle className="w-4 h-4" /></div>
+                  <h3 className="text-xs font-semibold text-foreground">Requieren atención</h3>
+                </div>
+                <div className="text-2xl font-bold text-foreground">{criticalActivities.length}</div>
+                <p className="text-[11px] text-muted-foreground mt-2">Actividades marcadas como situación crítica</p>
+              </div>
+            </div>
 
             {/* Pie charts: year + status */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="stat-card">
-                <SectionHeader title="Actividades por aÃ±o" description="CÃ³mo se distribuyen los entregables entre 2026 y 2027." hint="Cada porciÃ³n muestra el porcentaje de actividades cuyo tÃ©rmino ocurre en ese aÃ±o." icon={<PieIcon className="w-4 h-4" />} chartId="prep-pie-year" />
+                <SectionHeader title="Actividades por año" description="Cómo se distribuyen los entregables entre 2026 y 2027." hint="Cada porción muestra el porcentaje de actividades cuyo término ocurre en ese año." icon={<PieIcon className="w-4 h-4" />} chartId="prep-pie-year" />
                 <div id="prep-pie-year">
                   <ResponsiveContainer width="100%" height={280}>
                     <PieChart>
@@ -577,12 +532,12 @@ export default function ReportesPage() {
                 </div>
               </div>
               <div className="stat-card">
-                <SectionHeader title="Actividades por estatus" description="DistribuciÃ³n actual entre pendientes, en proceso y entregadas." hint="Vista rÃ¡pida del estado general del proyecto." icon={<PieIcon className="w-4 h-4" />} chartId="prep-pie-status" />
+                <SectionHeader title="Actividades por estatus" description="Distribución actual entre pendientes, en proceso y entregadas." hint="Vista rápida del estado general del proyecto." icon={<PieIcon className="w-4 h-4" />} chartId="prep-pie-status" />
                 <div id="prep-pie-status">
                   <ResponsiveContainer width="100%" height={280}>
                     <PieChart>
                       <Pie data={prepPieByStatus} cx="50%" cy="50%" labelLine={false} label={renderCustomizedLabel} outerRadius={100} dataKey="value">
-                        {prepPieByStatus.map((d, i) => <Cell key={i} fill={STATUS_COLORS[["Pendiente","En Proceso","Por Entregar","Entregado"].indexOf(d.name)] || PIE_COLORS[i]} />)}
+                        {prepPieByStatus.map((d, i) => <Cell key={i} fill={STATUS_COLORS[["Pendiente","En Proceso","Entregado"].indexOf(d.name)] || PIE_COLORS[i]} />)}
                       </Pie>
                       <Tooltip formatter={(value: number) => [`${value} actividades`, '']} />
                       <Legend formatter={(value) => <span className="text-xs text-foreground">{value}</span>} />
@@ -594,7 +549,7 @@ export default function ReportesPage() {
 
             {/* Cumulative monthly progress */}
             <div className="stat-card">
-              <SectionHeader title="Â¿CÃ³mo avanzamos mes a mes?" description="Barras: actividades que terminan ese mes. LÃ­nea verde: avance acumulado. LÃ­nea punteada: meta total." hint="Permite ver el ritmo esperado de entregas y el progreso acumulado hacia la meta de 32 actividades." icon={<TrendingUp className="w-4 h-4" />} chartId="prep-cumulative-chart" />
+              <SectionHeader title="¿Cómo avanzamos mes a mes?" description="Barras: actividades que terminan ese mes. Línea verde: avance acumulado. Línea punteada: meta total." hint="Permite ver el ritmo esperado de entregas y el progreso acumulado hacia la meta de 32 actividades." icon={<TrendingUp className="w-4 h-4" />} chartId="prep-cumulative-chart" />
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs text-muted-foreground">Ver mes:</span>
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
@@ -627,13 +582,13 @@ export default function ReportesPage() {
 
             {/* Monthly breakdown table */}
             <div className="stat-card">
-              <SectionHeader title="Desglose mensual" description="Entregables por mes segÃºn la fecha de RemisiÃ³n al INE. Comparativo entre los 32 entregables principales y los 54 totales (incluyendo sub-entregables)." icon={<Calendar className="w-4 h-4" />} xlsxData={prepXlsx} xlsxFilename="prep_desglose_mensual" />
+              <SectionHeader title="Desglose mensual" description="Entregables por mes según la fecha de Remisión al INE. Comparativo entre los 32 entregables principales y los 54 totales (incluyendo sub-entregables)." icon={<Calendar className="w-4 h-4" />} xlsxData={prepXlsx} xlsxFilename="prep_desglose_mensual" />
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Mes</th>
-                      <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">AÃ±o</th>
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Año</th>
                       <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">32 entregables</th>
                       <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">54 entregables</th>
                     </tr>
@@ -643,8 +598,8 @@ export default function ReportesPage() {
                       <tr key={i} className="border-b border-border/30">
                         <td className="py-2 px-3 text-foreground">{row.month}</td>
                         <td className="py-2 px-3 text-foreground">{row.year}</td>
-                        <td className="py-2 px-3 text-center font-bold text-primary">{row.termino || 'â€”'}</td>
-                        <td className="py-2 px-3 text-center font-bold text-info">{row.remision || 'â€”'}</td>
+                        <td className="py-2 px-3 text-center font-bold text-primary">{row.termino || '—'}</td>
+                        <td className="py-2 px-3 text-center font-bold text-info">{row.remision || '—'}</td>
                       </tr>
                     ))}
                     <tr className="bg-muted/30 font-bold">
@@ -659,7 +614,7 @@ export default function ReportesPage() {
 
             {/* Monthly bar chart */}
             <div className="stat-card">
-              <SectionHeader title="Carga de trabajo por mes â€” Comparativo 32 vs 54" description="Compara el total de actividades (32 principales) contra todos los entregables con fecha de RemisiÃ³n al INE (54)." hint="Las barras moradas representan las 32 actividades principales por mes de tÃ©rmino. Las azules incluyen las 22 sub-entregas adicionales con remisiÃ³n al INE." icon={<BarChart3 className="w-4 h-4" />} chartId="prep-monthly-bar" />
+              <SectionHeader title="Carga de trabajo por mes — Comparativo 32 vs 54" description="Compara el total de actividades (32 principales) contra todos los entregables con fecha de Remisión al INE (54)." hint="Las barras moradas representan las 32 actividades principales por mes de término. Las azules incluyen las 22 sub-entregas adicionales con remisión al INE." icon={<BarChart3 className="w-4 h-4" />} chartId="prep-monthly-bar" />
               <div id="prep-monthly-bar">
                 <ResponsiveContainer width="100%" height={320}>
                   <BarChart data={comparisonChartData} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
@@ -681,7 +636,7 @@ export default function ReportesPage() {
 
             {/* Area progress */}
             <div className="stat-card">
-              <SectionHeader title="Avance por Ã¡rea responsable" description="CÃ³mo va cada Ã¡rea con sus entregables asignados." hint="Las Ã¡reas con mÃ¡s actividades requieren mayor seguimiento. El porcentaje muestra entregados respecto al total del Ã¡rea." icon={<Building className="w-4 h-4" />} xlsxData={areaXlsx} xlsxFilename="prep_avance_areas" />
+              <SectionHeader title="Avance por área responsable" description="Cómo va cada área con sus entregables asignados." hint="Las áreas con más actividades requieren mayor seguimiento. El porcentaje muestra entregados respecto al total del área." icon={<Building className="w-4 h-4" />} xlsxData={areaXlsx} xlsxFilename="prep_avance_areas" />
               <div className="space-y-3">
                 {Object.entries(areaGroups).sort((a, b) => b[1].total - a[1].total).map(([area, data]) => {
                   const pct = data.total > 0 ? Math.round((data.entregado / data.total) * 100) : 0;
@@ -693,8 +648,8 @@ export default function ReportesPage() {
                           <Badge variant="outline" className="text-[10px]">{data.total} actividades</Badge>
                         </div>
                         <div className="flex items-center gap-3 text-xs shrink-0">
-                          <span className="text-success">{data.entregado} âœ“</span>
-                          <span className="text-info">{data.enProceso} â—</span>
+                          <span className="text-success">{data.entregado} ✓</span>
+                          <span className="text-info">{data.enProceso} ◐</span>
                           <span className="text-muted-foreground">{data.pendiente} =</span>
                           <span className="font-bold text-foreground w-10 text-right">{pct}%</span>
                         </div>
@@ -708,9 +663,9 @@ export default function ReportesPage() {
 
             {/* Upcoming deadlines */}
             <div className="stat-card">
-              <SectionHeader title="PrÃ³ximos vencimientos" description="Las 10 actividades mÃ¡s cercanas a su fecha de tÃ©rmino que aÃºn no se entregan." icon={<Calendar className="w-4 h-4" />} xlsxData={upcomingXlsx} xlsxFilename="prep_proximos_vencimientos" />
+              <SectionHeader title="Próximos vencimientos" description="Las 10 actividades más cercanas a su fecha de término que aún no se entregan." icon={<Calendar className="w-4 h-4" />} xlsxData={upcomingXlsx} xlsxFilename="prep_proximos_vencimientos" />
               <div className="space-y-2">
-                {upcoming.length === 0 && <p className="text-sm text-muted-foreground">No hay prÃ³ximos vencimientos.</p>}
+                {upcoming.length === 0 && <p className="text-sm text-muted-foreground">No hay próximos vencimientos.</p>}
                 {upcoming.map((a) => {
                   const dias = Math.ceil((new Date(a.proyeccion.termino).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                   const fecha = new Date(a.proyeccion.termino + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' });
@@ -731,20 +686,20 @@ export default function ReportesPage() {
             </div>
           </TabsContent>
 
-          {/* HistÃ³rico Tab */}
+          {/* Histórico Tab */}
           <TabsContent value="historico" className="space-y-6 mt-4">
-            {/* Executive summary histÃ³rico */}
+            {/* Executive summary histórico */}
             <div className="rounded-xl border border-info/20 bg-gradient-to-r from-info/5 to-primary/5 p-5">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-lg bg-info/15 text-info flex items-center justify-center shrink-0">
                   <Target className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-sm font-semibold text-foreground">Resumen del histÃ³rico (2023â€“2025)</h2>
+                  <h2 className="text-sm font-semibold text-foreground">Resumen del histórico (2023–2025)</h2>
                   <p className="text-sm text-foreground/90 mt-1 leading-relaxed">
                     {histStats.total === 0
-                      ? 'No hay actividades registradas en el periodo histÃ³rico.'
-                      : <>En el periodo se registraron <span className="font-semibold">{histStats.total}</span> actividades, ademÃ¡s de <span className="font-semibold text-primary">{sessionSummary.cepaprep.extraordinarias + sessionSummary.cepaprep.ordinarias + sessionSummary.cepaprep.reuniones}</span> reuniones de CEPAPREP y <span className="font-semibold text-primary">{sessionSummary.cg.extraordinarias + sessionSummary.cg.ordinarias + sessionSummary.cg.reuniones}</span> del Consejo General.</>}
+                      ? 'No hay actividades registradas en el periodo histórico.'
+                      : <>En el periodo se registraron <span className="font-semibold">{histStats.total}</span> actividades, además de <span className="font-semibold text-primary">{sessionSummary.cepaprep.extraordinarias + sessionSummary.cepaprep.ordinarias + sessionSummary.cepaprep.reuniones}</span> reuniones de CEPAPREP y <span className="font-semibold text-primary">{sessionSummary.cg.extraordinarias + sessionSummary.cg.ordinarias + sessionSummary.cg.reuniones}</span> del Consejo General.</>}
                   </p>
                 </div>
               </div>
@@ -752,10 +707,10 @@ export default function ReportesPage() {
 
             {/* Session Summary */}
             <div className="stat-card">
-              <SectionHeader title="Resumen de sesiones" description="Sesiones y reuniones de trabajo realizadas por Ã³rgano." hint="Las sesiones extraordinarias atienden temas urgentes; las ordinarias estÃ¡n calendarizadas; las reuniones de trabajo son tÃ©cnicas previas." icon={<Users className="w-4 h-4" />}
+              <SectionHeader title="Resumen de sesiones" description="Sesiones y reuniones de trabajo realizadas por órgano." hint="Las sesiones extraordinarias atienden temas urgentes; las ordinarias están calendarizadas; las reuniones de trabajo son técnicas previas." icon={<Users className="w-4 h-4" />}
                 xlsxData={[
-                  { Ã“rgano: "CEPAPREP", "Sesiones Extraordinarias": sessionSummary.cepaprep.extraordinarias, "Sesiones Ordinarias": sessionSummary.cepaprep.ordinarias, "Reuniones de Trabajo": sessionSummary.cepaprep.reuniones },
-                  { Ã“rgano: "Consejo General", "Sesiones Extraordinarias": sessionSummary.cg.extraordinarias, "Sesiones Ordinarias": sessionSummary.cg.ordinarias, "Reuniones de Trabajo": sessionSummary.cg.reuniones },
+                  { Órgano: "CEPAPREP", "Sesiones Extraordinarias": sessionSummary.cepaprep.extraordinarias, "Sesiones Ordinarias": sessionSummary.cepaprep.ordinarias, "Reuniones de Trabajo": sessionSummary.cepaprep.reuniones },
+                  { Órgano: "Consejo General", "Sesiones Extraordinarias": sessionSummary.cg.extraordinarias, "Sesiones Ordinarias": sessionSummary.cg.ordinarias, "Reuniones de Trabajo": sessionSummary.cg.reuniones },
                 ]}
                 xlsxFilename="resumen_sesiones"
               />
@@ -781,9 +736,9 @@ export default function ReportesPage() {
               </div>
             </div>
 
-            {/* HistÃ³rico Pie by Year */}
+            {/* Histórico Pie by Year */}
             <div className="stat-card">
-              <SectionHeader title="Actividades por aÃ±o" description="DistribuciÃ³n de actividades histÃ³ricas entre 2023, 2024 y 2025." hint="Cada porciÃ³n representa el porcentaje del total de actividades cuyo tÃ©rmino ocurriÃ³ en ese aÃ±o." icon={<PieIcon className="w-4 h-4" />} chartId="historico-pie-year" />
+              <SectionHeader title="Actividades por año" description="Distribución de actividades históricas entre 2023, 2024 y 2025." hint="Cada porción representa el porcentaje del total de actividades cuyo término ocurrió en ese año." icon={<PieIcon className="w-4 h-4" />} chartId="historico-pie-year" />
               <div id="historico-pie-year">
                 <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
@@ -797,9 +752,9 @@ export default function ReportesPage() {
               </div>
             </div>
 
-            {/* HistÃ³rico Cumulative Chart */}
+            {/* Histórico Cumulative Chart */}
             <div className="stat-card">
-              <SectionHeader title="Avance mes a mes (histÃ³rico)" description="Barras: actividades terminadas por mes. LÃ­nea verde: acumulado total." hint="Permite comparar la intensidad de trabajo mes a mes durante el periodo histÃ³rico." icon={<TrendingUp className="w-4 h-4" />} chartId="historico-cumulative-chart" />
+              <SectionHeader title="Avance mes a mes (histórico)" description="Barras: actividades terminadas por mes. Línea verde: acumulado total." hint="Permite comparar la intensidad de trabajo mes a mes durante el periodo histórico." icon={<TrendingUp className="w-4 h-4" />} chartId="historico-cumulative-chart" />
               <div id="historico-cumulative-chart">
                 <ResponsiveContainer width="100%" height={380}>
                   <ComposedChart data={historicoMonthly} margin={{ top: 30, right: 20, left: 10, bottom: 20 }}>
@@ -817,15 +772,15 @@ export default function ReportesPage() {
               </div>
             </div>
 
-            {/* HistÃ³rico monthly table */}
+            {/* Histórico monthly table */}
             <div className="stat-card">
-              <SectionHeader title="Desglose mensual histÃ³rico" description="Cantidad de actividades terminadas por mes. Disponible para descarga en Excel." icon={<Calendar className="w-4 h-4" />} xlsxData={historicoXlsx} xlsxFilename="historico_desglose_mensual" />
+              <SectionHeader title="Desglose mensual histórico" description="Cantidad de actividades terminadas por mes. Disponible para descarga en Excel." icon={<Calendar className="w-4 h-4" />} xlsxData={historicoXlsx} xlsxFilename="historico_desglose_mensual" />
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Mes</th>
-                      <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">AÃ±o</th>
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Año</th>
                       <th className="text-center py-2 px-3 text-xs font-semibold text-muted-foreground">Actividades</th>
                     </tr>
                   </thead>
@@ -846,9 +801,9 @@ export default function ReportesPage() {
               </div>
             </div>
 
-            {/* HistÃ³rico bar chart */}
+            {/* Histórico bar chart */}
             <div className="stat-card">
-              <SectionHeader title="Carga histÃ³rica por mes" description="VisualizaciÃ³n en barras de la actividad mensual del periodo histÃ³rico." icon={<BarChart3 className="w-4 h-4" />} chartId="historico-monthly-bar" />
+              <SectionHeader title="Carga histórica por mes" description="Visualización en barras de la actividad mensual del periodo histórico." icon={<BarChart3 className="w-4 h-4" />} chartId="historico-monthly-bar" />
               <div id="historico-monthly-bar">
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={historicoMonthlyTable.map(r => ({ name: `${r.month.substring(0, 3)} ${r.year}`, actividades: r.count }))} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
@@ -869,4 +824,3 @@ export default function ReportesPage() {
     </AppLayout>
   );
 }
-
