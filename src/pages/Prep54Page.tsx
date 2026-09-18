@@ -258,19 +258,7 @@ function Tooltip({
             }
             return <span className="font-semibold text-muted-foreground">○ Pendiente</span>;
           })()}
-          <span className="text-muted-foreground">Relación</span>
-          <span className="font-semibold" style={{ color: estatusColor }}>
-            {item.estatusRelacion}
-          </span>
-          {item.actividadesRelacionadas &&
-            item.actividadesRelacionadas !== "No especificado en el documento" && (
-              <>
-                <span className="text-muted-foreground">Actividades</span>
-                <span className="text-foreground font-medium">
-                  {item.actividadesRelacionadas}
-                </span>
-              </>
-            )}
+          
         </div>
         {item.observaciones && (
           <p className="mt-2 text-[10px] text-muted-foreground italic border-t border-border/40 pt-2">
@@ -433,10 +421,7 @@ function GanttBarRow({
           boxShadow: `0 1px 4px ${barColor}40`,
         }}
       >
-        <div
-          className="absolute -right-1 -top-1 w-2.5 h-2.5 rounded-full border-2 border-card"
-          style={{ background: estatusColor }}
-        />
+        
         {barWidth > 35 && (
           <span className="absolute inset-0 flex items-center px-2 text-[9px] font-medium text-white truncate drop-shadow-sm">
             {barWidth > 160
@@ -1377,10 +1362,7 @@ export default function Prep54Page() {
                           style={{ background: temaColor }}
                           title={e.tema}
                         />
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ background: estatusColor }}
-                        />
+                        
                         <span className="font-mono text-muted-foreground w-5 sm:w-6 shrink-0 text-right text-[10px] sm:text-[11px]">
                           {e.no}
                         </span>
@@ -1453,10 +1435,7 @@ export default function Prep54Page() {
                             "1px solid color-mix(in srgb, var(--border) 30%, transparent)",
                         }}
                       >
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ background: estatusColor }}
-                        />
+                        
                         <span className="font-mono text-muted-foreground w-5 sm:w-6 shrink-0 text-right text-[10px] sm:text-[11px]">
                           {e.no}
                         </span>
@@ -1626,22 +1605,7 @@ export default function Prep54Page() {
               </div>
             </div>
           </div>
-          <div className="border-t border-border/30 pt-2">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-              Estatus de Relación
-            </p>
-            <div className="flex flex-wrap gap-4">
-              {Object.entries(ESTATUS_COLORES).map(([label, color]) => (
-                <div key={label} className="flex items-center gap-1.5">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ background: color as string }}
-                  />
-                  <span className="text-[11px] text-foreground">{label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          
           <div className="border-t border-border/30 pt-2">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Temas / Fases
