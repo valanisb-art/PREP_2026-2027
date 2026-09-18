@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, BarChart3, AlertTriangle, Building, Calendar, TrendingUp, Users, Download, Image, RefreshCw, HelpCircle, Sparkles, CheckCircle2, Clock, Target, Package, PieChart as PieIcon } from "lucide-react";
+import { FileText, BarChart3, AlertTriangle, Building, Calendar, TrendingUp, Users, Download, Image, RefreshCw, HelpCircle, Sparkles, CheckCircle2, Clock, Target, Package, Package, Package, PieChart as PieIcon } from "lucide-react";
 import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -74,6 +74,58 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
     </text>
   );
 };
+
+
+function parseDate(s: string) {
+  return new Date(s + "T00:00:00");
+}
+
+function getTemporalStatus(item: { inicio: string | null; fin: string | null; termino54?: string | null }): "completado" | "por_entregar" | "en_proceso" | "futuro" {
+  const finStr = item.termino54 || item.fin;
+  if (!finStr) return "futuro";
+  const finDate = parseDate(finStr);
+  const finYear = finDate.getFullYear();
+  const finMonth = finDate.getMonth();
+  const today = new Date();
+  const currYear = today.getFullYear();
+  const currMonth = today.getMonth();
+  const absFinMonth = finYear * 12 + finMonth;
+  const absCurrMonth = currYear * 12 + currMonth;
+  
+  if (absFinMonth <= absCurrMonth) return "completado";
+  if (absFinMonth === absCurrMonth + 1) return "por_entregar";
+  
+  if (!item.inicio) return "futuro";
+  const inicioDate = parseDate(item.inicio);
+  if (inicioDate <= today) return "en_proceso";
+  return "futuro";
+}
+
+
+function parseDate(s: string) {
+  return new Date(s + "T00:00:00");
+}
+
+function getTemporalStatus(item: { inicio: string | null; fin: string | null; termino54?: string | null }): "completado" | "por_entregar" | "en_proceso" | "futuro" {
+  const finStr = item.termino54 || item.fin;
+  if (!finStr) return "futuro";
+  const finDate = parseDate(finStr);
+  const finYear = finDate.getFullYear();
+  const finMonth = finDate.getMonth();
+  const today = new Date();
+  const currYear = today.getFullYear();
+  const currMonth = today.getMonth();
+  const absFinMonth = finYear * 12 + finMonth;
+  const absCurrMonth = currYear * 12 + currMonth;
+  
+  if (absFinMonth <= absCurrMonth) return "completado";
+  if (absFinMonth === absCurrMonth + 1) return "por_entregar";
+  
+  if (!item.inicio) return "futuro";
+  const inicioDate = parseDate(item.inicio);
+  if (inicioDate <= today) return "en_proceso";
+  return "futuro";
+}
 
 export default function ReportesPage() {
   const [prepStatusOverrides, setPrepStatusOverrides] = useState<Record<number, ActivityStatus>>({});
@@ -183,6 +235,54 @@ export default function ReportesPage() {
   }, [prepActivities]);
 
   const prepProgress = prepStats.total > 0 ? Math.round((prepStats.entregado / prepStats.total) * 100) : 0;
+
+  const prep54Stats = useMemo(() => {
+    let pendiente = 0, enProceso = 0, entregado = 0, porEntregar = 0;
+    entregables54.forEach(a => {
+      const status = getTemporalStatus(a as any);
+      if (status === 'completado') entregado++;
+      else if (status === 'por_entregar') porEntregar++;
+      else if (status === 'en_proceso') enProceso++;
+      else pendiente++;
+    });
+    return { total: entregables54.length, pendiente, enProceso, entregado, porEntregar };
+  }, []);
+
+  const prep54Progress = prep54Stats.total > 0 ? Math.round((prep54Stats.entregado / prep54Stats.total) * 100) : 0;
+
+  const prep54PieByStatus = useMemo(() => {
+    return [
+      { name: 'Entregado', value: prep54Stats.entregado },
+      { name: 'Por Entregar', value: prep54Stats.porEntregar },
+      { name: 'En Proceso', value: prep54Stats.enProceso },
+      { name: 'Pendiente', value: prep54Stats.pendiente },
+    ].filter(d => d.value > 0);
+  }, [prep54Stats]);
+
+
+  const prep54Stats = useMemo(() => {
+    let pendiente = 0, enProceso = 0, entregado = 0, porEntregar = 0;
+    entregables54.forEach(a => {
+      const status = getTemporalStatus(a as any);
+      if (status === 'completado') entregado++;
+      else if (status === 'por_entregar') porEntregar++;
+      else if (status === 'en_proceso') enProceso++;
+      else pendiente++;
+    });
+    return { total: entregables54.length, pendiente, enProceso, entregado, porEntregar };
+  }, []);
+
+  const prep54Progress = prep54Stats.total > 0 ? Math.round((prep54Stats.entregado / prep54Stats.total) * 100) : 0;
+
+  const prep54PieByStatus = useMemo(() => {
+    return [
+      { name: 'Entregado', value: prep54Stats.entregado },
+      { name: 'Por Entregar', value: prep54Stats.porEntregar },
+      { name: 'En Proceso', value: prep54Stats.enProceso },
+      { name: 'Pendiente', value: prep54Stats.pendiente },
+    ].filter(d => d.value > 0);
+  }, [prep54Stats]);
+
 
   // Histórico stats
   const histStats = useMemo(() => {
@@ -417,7 +517,7 @@ export default function ReportesPage() {
     return <text x={x + width / 2} y={y - 5} textAnchor="middle" fill="hsl(270, 60%, 50%)" fontSize={11} fontWeight={700}>{value}</text>;
   };
 
-  const STATUS_COLORS = ["hsl(38, 92%, 50%)", "hsl(200, 70%, 50%)", "hsl(152, 60%, 36%)"];
+  const STATUS_COLORS = ["hsl(38, 92%, 50%)", "hsl(200, 70%, 50%)", "hsl(152, 60%, 36%)", "hsl(270, 60%, 60%)"];
 
   const prepXlsx = monthlyCombinedTable.map(r => ({ Mes: r.month, Año: r.year, "32 entregables": r.termino, "54 entregables": r.remision }));
   const historicoXlsx = historicoMonthlyTable.map(r => ({ Mes: r.month, Año: r.year, Actividades: r.count }));
@@ -461,8 +561,15 @@ export default function ReportesPage() {
             <TabsTrigger value="historico">Histórico</TabsTrigger>
           </TabsList>
 
-          {/* PREP Tab */}
-          <TabsContent value="prep" className="space-y-6 mt-4">
+          { /* PREP Tab */ }
+          <TabsContent value="prep" className="mt-4">
+      <Tabs defaultValue="32" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsTrigger value="32">32 Entregables</TabsTrigger>
+          <TabsTrigger value="54">54 Entregables</TabsTrigger>
+          <TabsTrigger value="comparativo">Comparativo</TabsTrigger>
+        </TabsList>
+        <TabsContent value="32" className="space-y-6">
             {/* Executive summary */}
             <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 to-info/5 p-5">
               <div className="flex items-start gap-3">
@@ -580,7 +687,73 @@ export default function ReportesPage() {
               </div>
             </div>
 
-            {/* Monthly breakdown table */}
+            
+        </TabsContent>
+        <TabsContent value="54" className="space-y-6">
+            {/* Executive summary 54 */}
+            <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 to-info/5 p-5">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                  <Target className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-sm font-semibold text-foreground">Resumen ejecutivo (54 Entregables)</h2>
+                  <p className="text-sm text-foreground/90 mt-1 leading-relaxed">
+                    Llevamos un <span className="font-semibold text-primary">{prep54Progress}%</span> de avance: 
+                    <span className="font-semibold text-success"> {prep54Stats.entregado} entregadas</span>, 
+                    <span className="font-semibold text-[#a855f7]"> {prep54Stats.porEntregar} por entregar</span>, 
+                    <span className="font-semibold text-info"> {prep54Stats.enProceso} en proceso</span> y 
+                    <span className="font-semibold text-warning"> {prep54Stats.pendiente} pendientes</span> de un total de <span className="font-semibold">{prep54Stats.total}</span>.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI cards 54 */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="stat-card">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center"><BarChart3 className="w-4 h-4" /></div>
+                  <h3 className="text-xs font-semibold text-foreground">Â¿CÃ³mo vamos en general?</h3>
+                </div>
+                <div className="text-2xl font-bold text-foreground">{prep54Progress}%</div>
+                <Progress value={prep54Progress} className="h-1.5 mt-2" />
+              </div>
+              <div className="stat-card">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-md bg-info/10 text-info flex items-center justify-center"><FileText className="w-4 h-4" /></div>
+                  <h3 className="text-xs font-semibold text-foreground">Entregables totales</h3>
+                </div>
+                <div className="text-2xl font-bold text-foreground">{prep54Stats.total}</div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <Badge variant="outline" className="text-[10px] gap-1"><CheckCircle2 className="w-3 h-3 text-success" />{prep54Stats.entregado} entregados</Badge>
+                  {prep54Stats.porEntregar > 0 && <Badge variant="outline" className="text-[10px] gap-1"><Package className="w-3 h-3 text-[#a855f7]" />{prep54Stats.porEntregar} por entregar</Badge>}
+                  <Badge variant="outline" className="text-[10px] gap-1"><Clock className="w-3 h-3 text-info" />{prep54Stats.enProceso} en proceso</Badge>
+                  <Badge variant="outline" className="text-[10px] gap-1">{prep54Stats.pendiente} pendientes</Badge>
+                </div>
+              </div>
+            </div>
+
+            {/* Pie chart 54 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="stat-card">
+                <SectionHeader title="Actividades por estatus" description="DistribuciÃ³n actual entre pendientes, en proceso, por entregar y completadas." icon={<PieIcon className="w-4 h-4" />} />
+                <div className="h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={prep54PieByStatus} cx="50%" cy="50%" labelLine={false} outerRadius={100} dataKey="value">
+                        {prep54PieByStatus.map((d, i) => <Cell key={i} fill={STATUS_COLORS[["Pendiente","En Proceso","Entregado","Por Entregar"].indexOf(d.name)] || PIE_COLORS[i]} />)}
+                      </Pie>
+                      <Tooltip formatter={(value) => `${value} actividades`} />
+                      <Legend formatter={(value) => <span className="text-xs text-foreground">{value}</span>} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+        </TabsContent>
+        <TabsContent value="comparativo" className="space-y-6">
+{/* Monthly breakdown table */}
             <div className="stat-card">
               <SectionHeader title="Desglose mensual" description="Entregables por mes según la fecha de Remisión al INE. Comparativo entre los 32 entregables principales y los 54 totales (incluyendo sub-entregables)." icon={<Calendar className="w-4 h-4" />} xlsxData={prepXlsx} xlsxFilename="prep_desglose_mensual" />
               <div className="overflow-x-auto">
@@ -824,3 +997,8 @@ export default function ReportesPage() {
     </AppLayout>
   );
 }
+
+      </Tabs>
+    </TabsContent>
+
+{/* HistÃ³rico Tab */}undefined
