@@ -191,8 +191,8 @@ export default function ReportesPage() {
       });
     const customActs = customActivities.map(a => ({
       id: 0,
-      entregable: a.entregable,
-      actividad: a.actividad,
+      "Entregable": a.entregable,
+      "Actividad": a.actividad,
       documento: a.documento || '',
       fundamento: a.fundamento || '',
       organoAprueba: a.organo_aprueba || '',
@@ -519,16 +519,16 @@ export default function ReportesPage() {
 
   const STATUS_COLORS = ["hsl(38, 92%, 50%)", "hsl(200, 70%, 50%)", "hsl(152, 60%, 36%)", "hsl(270, 60%, 60%)"];
 
-  const prepXlsx = monthlyCombinedTable.map(r => ({ Mes: r.month, Año: r.year, "32 entregables": r.termino, "54 entregables": r.remision }));
-  const historicoXlsx = historicoMonthlyTable.map(r => ({ Mes: r.month, Año: r.year, Actividades: r.count }));
+  const prepXlsx = monthlyCombinedTable.map(r => ({ "Mes": r.month, "Año": r.year, "32 entregables": r.termino, "54 entregables": r.remision }));
+  const historicoXlsx = historicoMonthlyTable.map(r => ({ "Mes": r.month, "Año": r.year, "Actividades": r.count }));
   const upcomingXlsx = upcoming.map(a => ({
-    Entregable: a.entregable, Actividad: a.actividad, Área: a.areaResponsable,
+    "Entregable": a.entregable, "Actividad": a.actividad, "Área": a.areaResponsable,
     Término: a.proyeccion.termino ? new Date(a.proyeccion.termino).toLocaleDateString('es-MX') : '',
-    Estado: a.status,
+    "Estado": a.status,
   }));
   const areaXlsx = Object.entries(areaGroups).map(([area, d]) => ({
-    Área: area, Total: d.total, Entregados: d.entregado, "En Proceso": d.enProceso, Pendientes: d.pendiente,
-    "Avance %": d.total > 0 ? Math.round((d.entregado / d.total) * 100) : 0,
+    Área: area, "Total": d.total, "Entregados": d.entregado, "En "En Proceso": d.enProceso, "Pendientes": d.pendiente,
+    "Avance "Total": d.total > 0 ? Math.round((d.entregado / d.total) * 100) : 0,
   }));
 
   return (
@@ -988,7 +988,7 @@ export default function ReportesPage() {
               <SectionHeader title="Carga histórica por mes" description="Visualización en barras de la actividad mensual del periodo histórico." icon={<BarChart3 className="w-4 h-4" />} chartId="historico-monthly-bar" />
               <div id="historico-monthly-bar">
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={historicoMonthlyTable.map(r => ({ name: `${r.month.substring(0, 3)} ${r.year}`, actividades: r.count }))} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
+                  <BarChart data={historicoMonthlyTable.map(r => ({ name: `${r.month.substring(0, 3)} ${r.year}`, "Actividades": r.count }))} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 88%)" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} interval={0} />
                     <YAxis tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} />
