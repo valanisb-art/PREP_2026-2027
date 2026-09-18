@@ -522,10 +522,8 @@ export default function Prep54Page() {
       }
     }
 
-    if (matchData && matchData.activity.status && matchData.activity.status !== 'Pendiente') {
-      return matchData.activity.status;
-    }
-    
+    // Ignoramos el estatus manual de la base de datos para que la lógica 
+    // automática aplique de forma estricta a los 54 entregables.
     return autoStatus;
   };
 
@@ -1407,19 +1405,7 @@ export default function Prep54Page() {
                         </span>
                         <div className="shrink-0 max-w-[90px] hidden md:inline">
                           {(() => {
-                            const matchData = getMatchingActivity(e);
                             const status = getStatus(e);
-                            if (matchData && !matchData.isSub) {
-                              return (
-                                <StatusChanger
-                                  activityId={Number(matchData.activity.id)}
-                                  currentStatus={status}
-                                  dbStatus={status}
-                                  onStatusChange={() => {}}
-                                  compact={true}
-                                />
-                              );
-                            }
                             return (
                               <span className={`text-[10px] font-medium truncate ${getStatusColor(status)}`}>
                                 {status}
@@ -1495,19 +1481,7 @@ export default function Prep54Page() {
                         </span>
                         <div className="shrink-0 max-w-[90px] hidden md:inline">
                           {(() => {
-                            const matchData = getMatchingActivity(e);
                             const status = getStatus(e);
-                            if (matchData && !matchData.isSub) {
-                              return (
-                                <StatusChanger
-                                  activityId={Number(matchData.activity.id)}
-                                  currentStatus={status}
-                                  dbStatus={status}
-                                  onStatusChange={() => {}}
-                                  compact={true}
-                                />
-                              );
-                            }
                             return (
                               <span className={`text-[10px] font-medium truncate ${getStatusColor(status)}`}>
                                 {status}
