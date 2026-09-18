@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { usePrepActivitiesWithSubs } from "@/hooks/usePrepActivitiesWithSubs";
 import AppLayout from "@/components/AppLayout";
+import StatusChanger from "@/components/actividad/StatusChanger";
 import {
   entregables54Gantt,
   Entregable54Gantt,
@@ -440,11 +441,11 @@ const GANTT_EXCEL_MONTHS = [
 export default function Prep54Page() {
   const { activities: unifiedActivities } = usePrepActivitiesWithSubs();
 
-  const getStatus = (item: Entregable54Gantt) => {
-    if (!item || !item.descripcion) return 'Pendiente';
+  const getMatchingActivity = (item: Entregable54Gantt) => {
+    if (!item || !item.descripcion) return null;
     
     const cleanDesc = item.descripcion.trim().toLowerCase();
-    let match = unifiedActivities.find(ua => ua?.actividad?.trim().toLowerCase() === cleanDesc);
+    let match: any = unifiedActivities.find(ua => ua?.actividad?.trim().toLowerCase() === cleanDesc);
     
     if (!match) {
       const numMatch = item.entregable.match(/No\.?\s*(\d+)/i);
@@ -454,13 +455,18 @@ export default function Prep54Page() {
       }
     }
     
-    if (match) return match.status;
+    if (match) return { activity: match, isSub: false };
 
     for (const ua of unifiedActivities) {
       const subMatch = (ua.subActivities || []).find((sub: any) => sub?.actividad?.trim().toLowerCase() === cleanDesc);
-      if (subMatch) return subMatch.status;
+      if (subMatch) return { activity: subMatch, isSub: true };
     }
-    return 'Pendiente';
+    return null;
+  };
+
+  const getStatus = (item: Entregable54Gantt) => {
+    const matchData = getMatchingActivity(item);
+    return matchData ? matchData.activity.status : 'Pendiente';
   };
 
   const getStatusColor = (status: string) => {
@@ -1335,9 +1341,28 @@ export default function Prep54Page() {
                         >
                           {e.entregable}
                         </span>
-                        <span className={`text-[10px] font-medium shrink-0 max-w-[80px] truncate hidden md:inline ${getStatusColor(getStatus(e))}`}>
-                          {getStatus(e)}
-                        </span>
+                        <div className="shrink-0 max-w-[90px] hidden md:inline">
+                          {(() => {
+                            const matchData = getMatchingActivity(e);
+                            const status = getStatus(e);
+                            if (matchData && !matchData.isSub) {
+                              return (
+                                <StatusChanger
+                                  activityId={Number(matchData.activity.id)}
+                                  currentStatus={status}
+                                  dbStatus={status}
+                                  onStatusChange={() => {}}
+                                  compact={true}
+                                />
+                              );
+                            }
+                            return (
+                              <span className={`text-[10px] font-medium truncate ${getStatusColor(status)}`}>
+                                {status}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </div>
                     );
                   })
@@ -1401,9 +1426,28 @@ export default function Prep54Page() {
                         >
                           {e.entregable}
                         </span>
-                        <span className={`text-[10px] font-medium shrink-0 max-w-[80px] truncate hidden md:inline ${getStatusColor(getStatus(e))}`}>
-                          {getStatus(e)}
-                        </span>
+                        <div className="shrink-0 max-w-[90px] hidden md:inline">
+                          {(() => {
+                            const matchData = getMatchingActivity(e);
+                            const status = getStatus(e);
+                            if (matchData && !matchData.isSub) {
+                              return (
+                                <StatusChanger
+                                  activityId={Number(matchData.activity.id)}
+                                  currentStatus={status}
+                                  dbStatus={status}
+                                  onStatusChange={() => {}}
+                                  compact={true}
+                                />
+                              );
+                            }
+                            return (
+                              <span className={`text-[10px] font-medium truncate ${getStatusColor(status)}`}>
+                                {status}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </div>
                     );
                   })}

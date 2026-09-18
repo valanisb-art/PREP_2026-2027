@@ -192,7 +192,16 @@ export default function ReportesPage() {
       let status: ActivityStatus = 'Pendiente';
       const cleanDesc = ganttItem.descripcion.trim().toLowerCase();
       
-      const match = unifiedActivities.find(ua => ua.actividad.trim().toLowerCase() === cleanDesc);
+      let match = unifiedActivities.find(ua => ua.actividad.trim().toLowerCase() === cleanDesc);
+      
+      if (!match) {
+        const numMatch = ganttItem.entregable.match(/No\.?\s*(\d+)/i);
+        if (numMatch) {
+          const num = numMatch[1];
+          match = unifiedActivities.find(ua => String(ua.entregable) === num);
+        }
+      }
+
       if (match) {
         status = match.status;
       } else {

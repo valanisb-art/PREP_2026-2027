@@ -18,6 +18,7 @@ interface StatusChangerProps {
   dbStatus: ActivityStatus | null;
   onStatusChange: (newStatus: ActivityStatus) => void;
   section?: string;
+  compact?: boolean;
 }
 
 export default function StatusChanger({
@@ -26,6 +27,7 @@ export default function StatusChanger({
   dbStatus,
   onStatusChange,
   section = "prep",
+  compact = false,
 }: StatusChangerProps) {
   const { isAdmin, isOperativo, isInvitado, user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -78,6 +80,24 @@ export default function StatusChanger({
   }
 
   if (isAdmin) {
+    if (compact) {
+      return (
+        <Select
+          value={effectiveStatus}
+          onValueChange={handleChange}
+          disabled={loading}
+        >
+          <SelectTrigger className="h-6 w-[90px] text-[10px] px-2 py-0 border-transparent bg-transparent hover:bg-black/5 dark:hover:bg-white/5 focus:ring-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Pendiente" className="text-[10px]">Pendiente</SelectItem>
+            <SelectItem value="En Proceso" className="text-[10px]">En Proceso</SelectItem>
+            <SelectItem value="Entregado" className="text-[10px]">Entregado</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
     return (
       <div className="flex items-center gap-3">
         <Shield className="w-4 h-4 text-primary" />
