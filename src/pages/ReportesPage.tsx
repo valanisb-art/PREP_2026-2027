@@ -101,32 +101,6 @@ function getTemporalStatus(item: { inicio: string | null; fin: string | null; te
   return "futuro";
 }
 
-
-function parseDate(s: string) {
-  return new Date(s + "T00:00:00");
-}
-
-function getTemporalStatus(item: { inicio: string | null; fin: string | null; termino54?: string | null }): "completado" | "por_entregar" | "en_proceso" | "futuro" {
-  const finStr = item.termino54 || item.fin;
-  if (!finStr) return "futuro";
-  const finDate = parseDate(finStr);
-  const finYear = finDate.getFullYear();
-  const finMonth = finDate.getMonth();
-  const today = new Date();
-  const currYear = today.getFullYear();
-  const currMonth = today.getMonth();
-  const absFinMonth = finYear * 12 + finMonth;
-  const absCurrMonth = currYear * 12 + currMonth;
-  
-  if (absFinMonth <= absCurrMonth) return "completado";
-  if (absFinMonth === absCurrMonth + 1) return "por_entregar";
-  
-  if (!item.inicio) return "futuro";
-  const inicioDate = parseDate(item.inicio);
-  if (inicioDate <= today) return "en_proceso";
-  return "futuro";
-}
-
 export default function ReportesPage() {
   const [prepStatusOverrides, setPrepStatusOverrides] = useState<Record<number, ActivityStatus>>({});
   const [historicoStatusOverrides, setHistoricoStatusOverrides] = useState<Record<number, ActivityStatus>>({});
@@ -191,8 +165,8 @@ export default function ReportesPage() {
       });
     const customActs = customActivities.map(a => ({
       id: 0,
-      "Entregable": a.entregable,
-      "Actividad": a.actividad,
+      entregable: a.entregable,
+      actividad: a.actividad,
       documento: a.documento || '',
       fundamento: a.fundamento || '',
       organoAprueba: a.organo_aprueba || '',
@@ -235,30 +209,6 @@ export default function ReportesPage() {
   }, [prepActivities]);
 
   const prepProgress = prepStats.total > 0 ? Math.round((prepStats.entregado / prepStats.total) * 100) : 0;
-
-  const prep54Stats = useMemo(() => {
-    let pendiente = 0, enProceso = 0, entregado = 0, porEntregar = 0;
-    entregables54.forEach(a => {
-      const status = getTemporalStatus(a as any);
-      if (status === 'completado') entregado++;
-      else if (status === 'por_entregar') porEntregar++;
-      else if (status === 'en_proceso') enProceso++;
-      else pendiente++;
-    });
-    return { total: entregables54.length, pendiente, enProceso, entregado, porEntregar };
-  }, []);
-
-  const prep54Progress = prep54Stats.total > 0 ? Math.round((prep54Stats.entregado / prep54Stats.total) * 100) : 0;
-
-  const prep54PieByStatus = useMemo(() => {
-    return [
-      { name: 'Entregado', value: prep54Stats.entregado },
-      { name: 'Por Entregar', value: prep54Stats.porEntregar },
-      { name: 'En Proceso', value: prep54Stats.enProceso },
-      { name: 'Pendiente', value: prep54Stats.pendiente },
-    ].filter(d => d.value > 0);
-  }, [prep54Stats]);
-
 
   const prep54Stats = useMemo(() => {
     let pendiente = 0, enProceso = 0, entregado = 0, porEntregar = 0;
@@ -523,12 +473,12 @@ export default function ReportesPage() {
   const historicoXlsx = historicoMonthlyTable.map(r => ({ "Mes": r.month, "Año": r.year, "Actividades": r.count }));
   const upcomingXlsx = upcoming.map(a => ({
     "Entregable": a.entregable, "Actividad": a.actividad, "Área": a.areaResponsable,
-    Término: a.proyeccion.termino ? new Date(a.proyeccion.termino).toLocaleDateString('es-MX') : '',
+    "Término": a.proyeccion.termino ? new Date(a.proyeccion.termino).toLocaleDateString('es-MX') : '',
     "Estado": a.status,
   }));
   const areaXlsx = Object.entries(areaGroups).map(([area, d]) => ({
-    Área: area, "Total": d.total, "Entregados": d.entregado, "En "En Proceso": d.enProceso, "Pendientes": d.pendiente,
-    "Avance "Total": d.total > 0 ? Math.round((d.entregado / d.total) * 100) : 0,
+    "Área": area, "Total": d.total, "Entregados": d.entregado, "En Proceso": d.enProceso, "Pendientes": d.pendiente,
+    "Avance %": d.total > 0 ? Math.round((d.entregado / d.total) * 100) : 0,
   }));
 
   return (
@@ -561,7 +511,7 @@ export default function ReportesPage() {
             <TabsTrigger value="historico">Histórico</TabsTrigger>
           </TabsList>
 
-          { /* PREP Tab */ }
+          {/* PREP Tab */}
           <TabsContent value="prep" className="mt-4">
       <Tabs defaultValue="32" className="w-full">
         <TabsList className="grid w-full grid-cols-3 mb-6 bg-muted/50 p-1 rounded-lg">
@@ -574,7 +524,7 @@ export default function ReportesPage() {
             <span>54 Entregables</span>
           </TabsTrigger>
           <TabsTrigger value="comparativo" className="flex items-center justify-center gap-2">
-            <RefreshCw className="w-4 h-4" />
+            <ArrowRightLeft className="w-4 h-4" />
             <span>Comparativo</span>
           </TabsTrigger>
         </TabsList>
@@ -723,7 +673,7 @@ export default function ReportesPage() {
               <div className="stat-card">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center"><BarChart3 className="w-4 h-4" /></div>
-                  <h3 className="text-xs font-semibold text-foreground">Â¿CÃ³mo vamos en general?</h3>
+                  <h3 className="text-xs font-semibold text-foreground">¿Cómo vamos en general?</h3>
                 </div>
                 <div className="text-2xl font-bold text-foreground">{prep54Progress}%</div>
                 <Progress value={prep54Progress} className="h-1.5 mt-2" />
@@ -746,7 +696,7 @@ export default function ReportesPage() {
             {/* Pie chart 54 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="stat-card">
-                <SectionHeader title="Actividades por estatus" description="DistribuciÃ³n actual entre pendientes, en proceso, por entregar y completadas." icon={<PieIcon className="w-4 h-4" />} />
+                <SectionHeader title="Actividades por estatus" description="Distribución actual entre pendientes, en proceso, por entregar y completadas." icon={<PieIcon className="w-4 h-4" />} />
                 <div className="h-[280px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -868,7 +818,11 @@ export default function ReportesPage() {
             </div>
           </TabsContent>
 
-          {/* Histórico Tab */}
+          
+      </Tabs>
+    </TabsContent>
+
+{/* Histórico Tab */}
           <TabsContent value="historico" className="space-y-6 mt-4">
             {/* Executive summary histórico */}
             <div className="rounded-xl border border-info/20 bg-gradient-to-r from-info/5 to-primary/5 p-5">
@@ -988,7 +942,7 @@ export default function ReportesPage() {
               <SectionHeader title="Carga histórica por mes" description="Visualización en barras de la actividad mensual del periodo histórico." icon={<BarChart3 className="w-4 h-4" />} chartId="historico-monthly-bar" />
               <div id="historico-monthly-bar">
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={historicoMonthlyTable.map(r => ({ name: `${r.month.substring(0, 3)} ${r.year}`, "Actividades": r.count }))} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
+                  <BarChart data={historicoMonthlyTable.map(r => ({ name: `${r.month.substring(0, 3)} ${r.year}`, actividades: r.count }))} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 88%)" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} interval={0} />
                     <YAxis tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} tickLine={false} axisLine={false} />
@@ -1006,8 +960,3 @@ export default function ReportesPage() {
     </AppLayout>
   );
 }
-
-      </Tabs>
-    </TabsContent>
-
-{/* HistÃ³rico Tab */}undefined
